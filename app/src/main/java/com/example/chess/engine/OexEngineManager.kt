@@ -52,6 +52,25 @@ class OexEngineManager(private val context: Context) {
         val pm = context.packageManager
         val seenPackages = mutableSetOf<String>()
 
+        // 0. Check Pre-Bundled / Native Stockfish Engine
+        val nativeLibraryDir = context.applicationInfo.nativeLibraryDir
+        val bundledStockfish = File(nativeLibraryDir, "libstockfish.so")
+        if (bundledStockfish.exists()) {
+            list.add(
+                OexEngineInfo(
+                    id = "bundled_stockfish",
+                    name = "Stockfish 18 (Bundled Native)",
+                    packageName = context.packageName,
+                    executablePath = bundledStockfish.absolutePath,
+                    version = "Stockfish 18 Official Release",
+                    isStockfish = true,
+                    isOex = false,
+                    isCustom = true
+                )
+            )
+            seenPackages.add("bundled_stockfish")
+        }
+
         // 1. Check custom imported engines from Downloads/Files
         val savedCustomEngines = loadSavedCustomEngines()
         for (custom in savedCustomEngines) {
