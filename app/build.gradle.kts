@@ -1,3 +1,6 @@
+import java.io.File
+import java.net.URL
+import java.io.FileOutputStream
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
 plugins {
@@ -31,12 +34,6 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-    }
   }
 
   buildTypes {
@@ -46,7 +43,6 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -144,46 +140,46 @@ dependencies {
 }
 
 tasks.register("downloadStockfish") {
-    val arm64Lib = file("src/main/jniLibs/arm64-v8a/libstockfish.so")
-    val arm32Lib = file("src/main/jniLibs/armeabi-v7a/libstockfish.so")
-    
-    outputs.file(arm64Lib)
-    outputs.file(arm32Lib)
+    val projectDirStr = project.projectDir.absolutePath
+    val buildDirStr = project.layout.buildDirectory.get().asFile.absolutePath
 
     doLast {
+        val arm64Lib = File("$projectDirStr/src/main/jniLibs/arm64-v8a/libstockfish.so")
+        val arm32Lib = File("$projectDirStr/src/main/jniLibs/armeabi-v7a/libstockfish.so")
+
         arm64Lib.parentFile.mkdirs()
         arm32Lib.parentFile.mkdirs()
         
         if (!arm64Lib.exists()) {
             println("Downloading Stockfish ARM64...")
-            val tarFile = file("build/tmp/sf64.tar")
+            val tarFile = File("$buildDirStr/tmp/sf64.tar")
             tarFile.parentFile.mkdirs()
-            java.net.URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv8.tar").openStream().use { input ->
-                java.io.FileOutputStream(tarFile).use { output ->
+            URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv8.tar").openStream().use { input ->
+                FileOutputStream(tarFile).use { output ->
                     input.copyTo(output)
                 }
             }
-            copy {
-                from(tarTree(tarFile))
-                into("build/tmp/sf64_out")
-            }
-            file("build/tmp/sf64_out/stockfish/stockfish-android-armv8").renameTo(arm64Lib)
+            val outDir = File("$buildDirStr/tmp/sf64_out")
+            outDir.mkdirs()
+            Runtime.getRuntime().exec(arrayOf("tar", "-xf", tarFile.absolutePath, "-C", outDir.absolutePath)).waitFor()
+            val extractedFile = File(outDir, "stockfish/stockfish-android-armv8")
+            extractedFile.renameTo(arm64Lib)
         }
         
         if (!arm32Lib.exists()) {
             println("Downloading Stockfish ARM32...")
-            val tarFile = file("build/tmp/sf32.tar")
+            val tarFile = File("$buildDirStr/tmp/sf32.tar")
             tarFile.parentFile.mkdirs()
-            java.net.URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv7.tar").openStream().use { input ->
-                java.io.FileOutputStream(tarFile).use { output ->
+            URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv7.tar").openStream().use { input ->
+                FileOutputStream(tarFile).use { output ->
                     input.copyTo(output)
                 }
             }
-            copy {
-                from(tarTree(tarFile))
-                into("build/tmp/sf32_out")
-            }
-            file("build/tmp/sf32_out/stockfish/stockfish-android-armv7").renameTo(arm32Lib)
+            val outDir = File("$buildDirStr/tmp/sf32_out")
+            outDir.mkdirs()
+            Runtime.getRuntime().exec(arrayOf("tar", "-xf", tarFile.absolutePath, "-C", outDir.absolutePath)).waitFor()
+            val extractedFile = File(outDir, "stockfish/stockfish-android-armv7")
+            extractedFile.renameTo(arm32Lib)
         }
     }
 }
