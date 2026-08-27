@@ -65,39 +65,39 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = when (currentScreen) {
-                            ScreenState.ENGINE_DISCOVERY -> "Engine Discovery"
-                            ScreenState.MAIN_MENU -> "Chess Engine Hub"
-                            ScreenState.PLAY_BOARD -> "Live Chess Match"
-                            ScreenState.PUZZLES -> "Tactical Puzzles"
-                            ScreenState.HISTORY -> "Match History"
-                            ScreenState.SETTINGS -> "Engine & Board Settings"
-                        },
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                actions = {
-                    if (currentScreen != ScreenState.ENGINE_DISCOVERY) {
+            if (currentScreen != ScreenState.ENGINE_DISCOVERY && currentScreen != ScreenState.PLAY_BOARD) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = when (currentScreen) {
+                                ScreenState.ENGINE_DISCOVERY -> "Engine Discovery"
+                                ScreenState.MAIN_MENU -> "Chess Engine Hub"
+                                ScreenState.PLAY_BOARD -> "Live Chess Match"
+                                ScreenState.PUZZLES -> "Tactical Puzzles"
+                                ScreenState.HISTORY -> "Match History"
+                                ScreenState.SETTINGS -> "Engine & Board Settings"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    },
+                    actions = {
                         IconButton(
                             onClick = { currentScreen = ScreenState.ENGINE_DISCOVERY },
                             modifier = Modifier.testTag("nav_btn_engine_scan")
                         ) {
                             Icon(Icons.Default.Memory, contentDescription = "Engines")
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground
+                    )
                 )
-            )
+            }
         },
         bottomBar = {
-            if (currentScreen != ScreenState.ENGINE_DISCOVERY) {
+            if (currentScreen != ScreenState.ENGINE_DISCOVERY && currentScreen != ScreenState.PLAY_BOARD) {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 6.dp
@@ -167,7 +167,8 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
                 )
                 ScreenState.PLAY_BOARD -> PlayScreen(
                     viewModel = viewModel,
-                    onBackToMenu = { currentScreen = ScreenState.MAIN_MENU }
+                    onBackToMenu = { currentScreen = ScreenState.MAIN_MENU },
+                    onOpenSettings = { currentScreen = ScreenState.SETTINGS }
                 )
                 ScreenState.PUZZLES -> PuzzlesScreen(
                     viewModel = viewModel,

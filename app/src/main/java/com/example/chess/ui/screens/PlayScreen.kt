@@ -3,8 +3,10 @@ package com.example.chess.ui.screens
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -21,18 +23,26 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.chess.model.GameMode
-import com.example.chess.model.GameStatus
-import com.example.chess.model.PgnUtils
-import com.example.chess.model.PieceColor
+import com.example.chess.model.*
 import com.example.chess.ui.ChessViewModel
 import com.example.chess.ui.components.*
+import kotlin.math.abs
+
+private val DarkSurfaceBg = Color(0xFF13171D)
+private val DarkCardBg = Color(0xFF181D24)
+private val DarkCardBorder = Color(0xFF262D38)
+private val BrandGreen = Color(0xFF10B981)
+private val BrandGreenContainer = Color(0xFF064E3B)
+private val ActiveTurnGreen = Color(0xFF22C55E)
+private val AmberAssistant = Color(0xFFF59E0B)
+private val AmberAssistantBg = Color(0xFF2B2212)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayScreen(
     viewModel: ChessViewModel,
     onBackToMenu: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -45,283 +55,182 @@ fun PlayScreen(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(DarkSurfaceBg)
     ) {
-        val isCompact = maxWidth < 380.dp || maxHeight < 560.dp
-        val horizontalPadding = if (isCompact) 8.dp else 14.dp
-        val verticalSpacing = if (isCompact) 6.dp else 10.dp
+        val isLandscape = maxWidth > maxHeight * 1.05f || (maxWidth >= 480.dp && maxHeight <= 540.dp)
+        val isUltraCompact = maxWidth < 340.dp || maxHeight < 440.dp
+
+        // Only show recommendation arrow for the authorized player/helper bot turn
+        val shouldShowArrow = when {
+            state.gameMode == GameMode.HELPER_BOT -> state.position.activeColor == state.helperBotColor
+            state.gameMode == GameMode.PLAYER_VS_AI -> state.position.activeColor == state.playerColor && state.isAssistantMode
+            state.gameMode == GameMode.ANALYSIS -> true
+            state.isAssistantMode -> true
+            else -> false
+        }
+        val activeArrow = if (shouldShowArrow) state.engineArrowMove else null
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = horizontalPadding, vertical = if (isCompact) 4.dp else 8.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(verticalSpacing)
-        ) {
-            // Navigation header (Back to Main Menu)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 520.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                OutlinedButton(
-                    onClick = onBackToMenu,
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = if (isCompact) 8.dp else 12.dp, vertical = 4.dp),
-                    modifier = Modifier.testTag("btn_back_to_menu")
-                ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Menu", style = MaterialTheme.typography.labelMedium)
-                }
-
-                // Sound & Audio quick toggle
-                IconButton(
-                    onClick = { viewModel.toggleSound() },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        if (state.isSoundEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
-                        contentDescription = "Toggle Sound",
-                        tint = if (state.isSoundEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // Top Evaluation Bar (when assistant or PvE is active)
-            if (state.isAssistantMode || state.gameMode == GameMode.PLAYER_VS_AI || state.gameMode == GameMode.HELPER_BOT || state.gameMode == GameMode.ANALYSIS) {
-                Box(modifier = Modifier.widthIn(max = 520.dp)) {
-                    EvaluationBar(
-                        evalCp = state.engineEvaluationCp,
-                        mateIn = state.engineMateIn,
-                        isThinking = state.isEngineThinking
-                    )
-                }
-            }
-
-            // Game Status Banner
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 520.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = when {
-                        state.status == GameStatus.CHECKMATE -> MaterialTheme.colorScheme.primaryContainer
-                        state.position.isKingInCheck(state.position.activeColor) -> MaterialTheme.colorScheme.errorContainer
-                        state.gameMode == GameMode.HELPER_BOT -> Color(0xFF2E7D32).copy(alpha = 0.15f)
-                        else -> MaterialTheme.colorScheme.surfaceVariant
-                    }
+                .padding(
+                    horizontal = if (isUltraCompact) 6.dp else if (isLandscape) 12.dp else 10.dp,
+                    vertical = if (isUltraCompact) 4.dp else if (isLandscape) 6.dp else 8.dp
                 ),
-                shape = RoundedCornerShape(if (isCompact) 10.dp else 12.dp)
-            ) {
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // 1. TOP HEADER (Brand, Engine title, Assistant pill, Restart, Settings)
+            TopPlayHeader(
+                state = state,
+                isLandscape = isLandscape,
+                onBackToMenu = onBackToMenu,
+                onToggleAssistant = { viewModel.toggleAssistant() },
+                onRestartGame = { showNewGameDialog = true },
+                onOpenSettings = onOpenSettings,
+                onToggleSound = { viewModel.toggleSound() }
+            )
+
+            // 2. MAIN BODY (Side-by-side in landscape / split-screen, or vertical stack in portrait)
+            if (isLandscape) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = if (isCompact) 10.dp else 14.dp, vertical = if (isCompact) 6.dp else 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .weight(1f)
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            val title = when (state.gameMode) {
-                                GameMode.PLAYER_VS_AI -> "Player vs Bot"
-                                GameMode.HELPER_BOT -> "Helper Mode (Plays automatically)"
-                                GameMode.PLAYER_VS_PLAYER -> "Pass & Play"
-                                GameMode.ANALYSIS -> "Analysis Board"
-                                GameMode.TACTICAL_PUZZLE -> "Tactical Puzzle"
-                            }
-                            Text(
-                                text = title,
-                                style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
-                                color = if (state.gameMode == GameMode.HELPER_BOT) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
+                    // Left Column: The Square Chess Board with rounded corners fitting the available height
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(DarkCardBg)
+                            .padding(2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (state.is3DView) {
+                            ChessBoard3D(
+                                position = state.position,
+                                orientation = state.boardOrientation,
+                                selectedSquare = state.selectedSquare,
+                                legalMoves = state.legalMovesForSelected,
+                                lastMove = state.lastMove,
+                                engineArrowMove = activeArrow,
+                                theme = state.boardTheme,
+                                onSquareClicked = { viewModel.onSquareClicked(it) }
                             )
-
-                            if (state.gameMode == GameMode.PLAYER_VS_AI || state.gameMode == GameMode.HELPER_BOT || state.isAssistantMode) {
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = if (state.isStockfishActive) Color(0xFF2E7D32).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant
-                                ) {
-                                    Text(
-                                        text = if (state.isStockfishActive) "⚡ ${state.activeEngineName}" else "🤖 ${state.activeEngineName}",
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (state.isStockfishActive) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            text = state.puzzleMessage ?: state.statusDescription,
-                            style = if (isCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (state.position.isKingInCheck(state.position.activeColor)) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    if (state.isEngineThinking) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "Thinking...",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold
+                        } else {
+                            ChessBoard2D(
+                                position = state.position,
+                                orientation = state.boardOrientation,
+                                selectedSquare = state.selectedSquare,
+                                legalMoves = state.legalMovesForSelected,
+                                lastMove = state.lastMove,
+                                engineArrowMove = activeArrow,
+                                theme = state.boardTheme,
+                                onSquareClicked = { viewModel.onSquareClicked(it) }
                             )
                         }
                     }
+
+                    // Right Column: Status Card, Dual Player Cards, Eval & Info Strip
+                    Column(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1f),
+                        verticalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        // Game Status Card
+                        StatusCardView(state = state, isCompact = true)
+
+                        // Dual Player Role Cards (Side by side)
+                        PlayerRoleCardsRow(state = state, isCompact = true)
+
+                        // Evaluation / Info Strip
+                        EvalInfoStrip(state = state, isCompact = true)
+                    }
+                }
+            } else {
+                // Portrait / Compact Mode
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Status Card
+                    StatusCardView(state = state, isCompact = isUltraCompact)
+
+                    // Dual Player Role Cards
+                    PlayerRoleCardsRow(state = state, isCompact = isUltraCompact)
+
+                    // Evaluation Bar
+                    if (state.isAssistantMode || state.gameMode == GameMode.PLAYER_VS_AI || state.gameMode == GameMode.HELPER_BOT || state.gameMode == GameMode.ANALYSIS) {
+                        EvalInfoStrip(state = state, isCompact = isUltraCompact)
+                    }
+
+                    // Centered Chess Board (2D or 3D)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 480.dp)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(DarkCardBg)
+                            .padding(2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (state.is3DView) {
+                            ChessBoard3D(
+                                position = state.position,
+                                orientation = state.boardOrientation,
+                                selectedSquare = state.selectedSquare,
+                                legalMoves = state.legalMovesForSelected,
+                                lastMove = state.lastMove,
+                                engineArrowMove = activeArrow,
+                                theme = state.boardTheme,
+                                onSquareClicked = { viewModel.onSquareClicked(it) }
+                            )
+                        } else {
+                            ChessBoard2D(
+                                position = state.position,
+                                orientation = state.boardOrientation,
+                                selectedSquare = state.selectedSquare,
+                                legalMoves = state.legalMovesForSelected,
+                                lastMove = state.lastMove,
+                                engineArrowMove = activeArrow,
+                                theme = state.boardTheme,
+                                onSquareClicked = { viewModel.onSquareClicked(it) }
+                            )
+                        }
+                    }
+
+                    // Move History
+                    Box(modifier = Modifier.widthIn(max = 480.dp)) {
+                        MoveHistoryView(moveHistory = state.moveHistory)
+                    }
                 }
             }
 
-            // Only show recommendation arrow for the authorized player/helper bot turn
-            val shouldShowArrow = when {
-                state.gameMode == GameMode.HELPER_BOT -> state.position.activeColor == state.helperBotColor
-                state.gameMode == GameMode.PLAYER_VS_AI -> state.position.activeColor == state.playerColor && state.isAssistantMode
-                state.gameMode == GameMode.ANALYSIS -> true
-                state.isAssistantMode -> true
-                else -> false
-            }
-            val activeArrow = if (shouldShowArrow) state.engineArrowMove else null
-
-            // Active Chess Board (2D or 3D) with perfect responsive constraint
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 500.dp)
-                    .clip(RoundedCornerShape(if (isCompact) 10.dp else 16.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(if (isCompact) 2.dp else 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (state.is3DView) {
-                    ChessBoard3D(
-                        position = state.position,
-                        orientation = state.boardOrientation,
-                        selectedSquare = state.selectedSquare,
-                        legalMoves = state.legalMovesForSelected,
-                        lastMove = state.lastMove,
-                        engineArrowMove = activeArrow,
-                        theme = state.boardTheme,
-                        onSquareClicked = { viewModel.onSquareClicked(it) }
-                    )
-                } else {
-                    ChessBoard2D(
-                        position = state.position,
-                        orientation = state.boardOrientation,
-                        selectedSquare = state.selectedSquare,
-                        legalMoves = state.legalMovesForSelected,
-                        lastMove = state.lastMove,
-                        engineArrowMove = activeArrow,
-                        theme = state.boardTheme,
-                        onSquareClicked = { viewModel.onSquareClicked(it) }
-                    )
-                }
-            }
-
-            // Move History Strip
-            Box(modifier = Modifier.widthIn(max = 500.dp)) {
-                MoveHistoryView(moveHistory = state.moveHistory)
-            }
-
-            // Primary Game Control Actions
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 500.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FilledTonalIconButton(
-                    onClick = { viewModel.undoMove() },
-                    enabled = state.moveHistory.isNotEmpty() && !state.isEngineThinking,
-                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_undo")
-                ) {
-                    Icon(Icons.Default.Undo, contentDescription = "Undo Move", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
-                }
-
-                FilledTonalIconButton(
-                    onClick = { viewModel.redoMove() },
-                    enabled = state.redoStack.isNotEmpty() && !state.isEngineThinking,
-                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_redo")
-                ) {
-                    Icon(Icons.Default.Redo, contentDescription = "Redo Move", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
-                }
-
-                FilledTonalIconButton(
-                    onClick = { viewModel.flipBoard() },
-                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_flip")
-                ) {
-                    Icon(Icons.Default.SwapVert, contentDescription = "Flip Board", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
-                }
-
-                FilledTonalIconToggleButton(
-                    checked = state.is3DView,
-                    onCheckedChange = { viewModel.toggle3DView() },
-                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_3d_toggle")
-                ) {
-                    Icon(Icons.Default.ViewInAr, contentDescription = "3D View Toggle", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
-                }
-
-                FilledTonalIconToggleButton(
-                    checked = state.isAssistantMode,
-                    onCheckedChange = { viewModel.toggleAssistant() },
-                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_assistant_toggle")
-                ) {
-                    Icon(Icons.Default.Psychology, contentDescription = "Assistant Toggle", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
-                }
-
-                FilledTonalIconButton(
-                    onClick = { showNewGameDialog = true },
-                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_new_game")
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "New Game", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
-                }
-            }
-
-            // Bottom Action Buttons: PGN Export and Mode Switcher
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 500.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        pgnExportText = PgnUtils.exportToPgn(state)
-                        showPgnDialog = true
-                    },
-                    modifier = Modifier.weight(1f).testTag("btn_export_pgn"),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = if (isCompact) 6.dp else 10.dp)
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Export PGN", style = MaterialTheme.typography.labelMedium)
-                }
-
-                Button(
-                    onClick = { showNewGameDialog = true },
-                    modifier = Modifier.weight(1f).testTag("btn_switch_mode"),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = if (isCompact) 6.dp else 10.dp)
-                ) {
-                    Icon(Icons.Default.SportsEsports, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Game Mode", style = MaterialTheme.typography.labelMedium)
-                }
-            }
+            // 3. BOTTOM ACTION BAR (New Game in Green, Undo, Modes, Export/Share)
+            BottomActionBar(
+                state = state,
+                isLandscape = isLandscape,
+                onNewGame = { showNewGameDialog = true },
+                onUndo = { viewModel.undoMove() },
+                onOpenModes = { showNewGameDialog = true },
+                onExportPgn = {
+                    pgnExportText = PgnUtils.exportToPgn(state)
+                    showPgnDialog = true
+                },
+                onFlipBoard = { viewModel.flipBoard() },
+                onToggle3D = { viewModel.toggle3DView() }
+            )
         }
     }
 
@@ -334,14 +243,14 @@ fun PlayScreen(
         )
     }
 
-    // New Game Dialog
+    // New Game / Mode Selection Dialog
     if (showNewGameDialog) {
         var selectedMode by remember { mutableStateOf(state.gameMode) }
         var selectedColor by remember { mutableStateOf(state.playerColor) }
 
         AlertDialog(
             onDismissRequest = { showNewGameDialog = false },
-            title = { Text("Start New Game", fontWeight = FontWeight.Bold) },
+            title = { Text("Game Modes & Roles", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("Select Game Mode:", style = MaterialTheme.typography.labelLarge)
@@ -396,9 +305,10 @@ fun PlayScreen(
                     onClick = {
                         viewModel.resetGame(mode = selectedMode, playerColor = selectedColor)
                         showNewGameDialog = false
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandGreen, contentColor = Color.Black)
                 ) {
-                    Text("Start Game")
+                    Text("Apply & Start", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -413,7 +323,7 @@ fun PlayScreen(
     if (showPgnDialog) {
         AlertDialog(
             onDismissRequest = { showPgnDialog = false },
-            title = { Text("PGN Notation", fontWeight = FontWeight.Bold) },
+            title = { Text("Chess PGN Notation", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     SelectionContainer {
@@ -424,7 +334,7 @@ fun PlayScreen(
                                 .fillMaxWidth()
                                 .heightIn(max = 240.dp)
                                 .verticalScroll(rememberScrollState())
-                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                                .background(DarkCardBg, RoundedCornerShape(8.dp))
                                 .padding(12.dp)
                         )
                     }
@@ -441,9 +351,10 @@ fun PlayScreen(
                         val shareIntent = Intent.createChooser(sendIntent, "Share Chess PGN")
                         context.startActivity(shareIntent)
                         showPgnDialog = false
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandGreen, contentColor = Color.Black)
                 ) {
-                    Text("Share PGN")
+                    Text("Share", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -452,5 +363,523 @@ fun PlayScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun TopPlayHeader(
+    state: ChessGameState,
+    isLandscape: Boolean,
+    onBackToMenu: () -> Unit,
+    onToggleAssistant: () -> Unit,
+    onRestartGame: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onToggleSound: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (isLandscape) 42.dp else 48.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left Branding & Engine Name
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Engine / Bot icon badge
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = BrandGreenContainer,
+                modifier = Modifier.size(if (isLandscape) 32.dp else 36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.SmartToy,
+                        contentDescription = "Engine Icon",
+                        tint = BrandGreen,
+                        modifier = Modifier.size(if (isLandscape) 18.dp else 20.dp)
+                    )
+                }
+            }
+
+            Column {
+                Text(
+                    text = state.activeEngineName,
+                    style = if (isLandscape) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = when (state.gameMode) {
+                        GameMode.HELPER_BOT -> "Helper Mode · Auto Plays"
+                        GameMode.PLAYER_VS_AI -> "NNUE · Engine Match"
+                        GameMode.PLAYER_VS_PLAYER -> "Pass & Play Mode"
+                        GameMode.ANALYSIS -> "Full Board Analysis"
+                        GameMode.TACTICAL_PUZZLE -> "Tactical Puzzle"
+                    },
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = Color(0xFF94A3B8)
+                )
+            }
+        }
+
+        // Right Actions (Assistant pill, Restart, Sound, Settings)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Assistant Pill Button
+            val colorLabel = if (state.playerColor == PieceColor.WHITE) "W" else "B"
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (state.isAssistantMode) AmberAssistantBg else DarkCardBg,
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (state.isAssistantMode) AmberAssistant else DarkCardBorder
+                ),
+                onClick = onToggleAssistant,
+                modifier = Modifier.testTag("btn_assistant_pill")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (state.isAssistantMode) AmberAssistant else Color(0xFF94A3B8)
+                    )
+                    Text(
+                        text = "Assistant ($colorLabel)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (state.isAssistantMode) AmberAssistant else Color(0xFF94A3B8)
+                    )
+                }
+            }
+
+            // Quick Restart / New Game
+            IconButton(
+                onClick = onRestartGame,
+                modifier = Modifier.size(32.dp).testTag("btn_header_restart")
+            ) {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "Restart Game",
+                    tint = Color(0xFFCBD5E1),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            // Sound Toggle
+            IconButton(
+                onClick = onToggleSound,
+                modifier = Modifier.size(32.dp).testTag("btn_header_sound")
+            ) {
+                Icon(
+                    if (state.isSoundEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                    contentDescription = "Toggle Sound",
+                    tint = if (state.isSoundEnabled) BrandGreen else Color(0xFF64748B),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            // Settings
+            IconButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.size(32.dp).testTag("btn_header_settings")
+            ) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = Color(0xFFCBD5E1),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusCardView(state: ChessGameState, isCompact: Boolean) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkCardBg),
+        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = if (isCompact) 8.dp else 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Status Indicator Dot
+                val isCheck = state.position.isKingInCheck(state.position.activeColor)
+                val dotColor = when {
+                    state.status == GameStatus.CHECKMATE -> Color(0xFFEF4444)
+                    isCheck -> Color(0xFFEF4444)
+                    state.isEngineThinking -> Color(0xFFF59E0B)
+                    state.status == GameStatus.IN_PROGRESS -> BrandGreen
+                    else -> Color(0xFFF59E0B)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(dotColor)
+                )
+
+                val statusTitle = when {
+                    state.status == GameStatus.CHECKMATE -> "Checkmate"
+                    isCheck -> "Check!"
+                    state.isEngineThinking -> "Calculating..."
+                    state.status == GameStatus.IN_PROGRESS -> {
+                        if (state.position.activeColor == PieceColor.WHITE) "White's Turn" else "Black's Turn"
+                    }
+                    else -> "Game Ready"
+                }
+
+                Text(
+                    text = statusTitle,
+                    style = if (isCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Text(
+                text = state.puzzleMessage ?: when {
+                    state.gameMode == GameMode.HELPER_BOT -> "Helper Bot automatically executes best calculated moves."
+                    state.gameMode == GameMode.PLAYER_VS_AI -> if (state.position.activeColor == state.playerColor) "Your turn. Select a piece to move." else "Bot is calculating response."
+                    state.position.isKingInCheck(state.position.activeColor) -> "King is under direct attack!"
+                    else -> "Select a piece to view legal moves."
+                },
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = if (isCompact) 11.sp else 12.sp),
+                color = Color(0xFF94A3B8)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerRoleCardsRow(state: ChessGameState, isCompact: Boolean) {
+    val isWhiteTurn = state.position.activeColor == PieceColor.WHITE
+    val isBlackTurn = state.position.activeColor == PieceColor.BLACK
+
+    val leftIsWhite = state.playerColor == PieceColor.WHITE
+
+    val player1Name = if (state.gameMode == GameMode.PLAYER_VS_AI) {
+        if (leftIsWhite) "You" else state.activeEngineName
+    } else if (state.gameMode == GameMode.HELPER_BOT) {
+        if (state.helperBotColor == PieceColor.WHITE) state.activeEngineName else "Opponent"
+    } else {
+        "White Player"
+    }
+
+    val player2Name = if (state.gameMode == GameMode.PLAYER_VS_AI) {
+        if (!leftIsWhite) "You" else state.activeEngineName
+    } else if (state.gameMode == GameMode.HELPER_BOT) {
+        if (state.helperBotColor == PieceColor.BLACK) state.activeEngineName else "Opponent"
+    } else {
+        "Black Player"
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Player 1 Card (White)
+        Card(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkCardBg),
+            border = androidx.compose.foundation.BorderStroke(
+                1.5.dp,
+                if (isWhiteTurn) ActiveTurnGreen else DarkCardBorder
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = if (isCompact) 6.dp else 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            if (player1Name.contains("Bot") || player1Name.contains("Stockfish") || player1Name.contains("Engine"))
+                                Icons.Default.SmartToy else Icons.Default.Person,
+                            contentDescription = null,
+                            tint = Color(0xFFE2E8F0),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = player1Name,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    // Active dot
+                    if (isWhiteTurn) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(ActiveTurnGreen)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "White pieces",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = Color(0xFF94A3B8)
+                )
+            }
+        }
+
+        // Player 2 Card (Black)
+        Card(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkCardBg),
+            border = androidx.compose.foundation.BorderStroke(
+                1.5.dp,
+                if (isBlackTurn) ActiveTurnGreen else DarkCardBorder
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = if (isCompact) 6.dp else 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            if (player2Name.contains("Bot") || player2Name.contains("Stockfish") || player2Name.contains("Engine"))
+                                Icons.Default.SmartToy else Icons.Default.Person,
+                            contentDescription = null,
+                            tint = Color(0xFFE2E8F0),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = player2Name,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    // Active dot
+                    if (isBlackTurn) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(ActiveTurnGreen)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Black pieces",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = Color(0xFF94A3B8)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EvalInfoStrip(state: ChessGameState, isCompact: Boolean) {
+    val evalText = when {
+        state.engineMateIn != null -> "M${abs(state.engineMateIn!!)}"
+        else -> {
+            val score = state.engineEvaluationCp / 100.0
+            if (state.engineEvaluationCp > 0) "+%.2f".format(score) else "%.2f".format(score)
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(DarkCardBg)
+            .border(1.dp, DarkCardBorder, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = if (isCompact) 4.dp else 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "Eval",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF94A3B8)
+            )
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = Color(0xFF1E293B)
+            ) {
+                Text(
+                    text = evalText,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = BrandGreen
+                )
+            }
+        }
+
+        Text(
+            text = if (state.isEngineThinking) "Thinking..." else "Ready",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (state.isEngineThinking) Color(0xFFF59E0B) else BrandGreen
+        )
+    }
+}
+
+@Composable
+private fun BottomActionBar(
+    state: ChessGameState,
+    isLandscape: Boolean,
+    onNewGame: () -> Unit,
+    onUndo: () -> Unit,
+    onOpenModes: () -> Unit,
+    onExportPgn: () -> Unit,
+    onFlipBoard: () -> Unit,
+    onToggle3D: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (isLandscape) 44.dp else 48.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Prominent Green "New Game" Button
+        Button(
+            onClick = onNewGame,
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = BrandGreen,
+                contentColor = Color(0xFF0F172A)
+            ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            modifier = Modifier
+                .weight(1.3f)
+                .fillMaxHeight()
+                .testTag("btn_bottom_new_game")
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("New Game", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+        }
+
+        // Dark Pill "Undo" Button
+        FilledTonalButton(
+            onClick = onUndo,
+            enabled = state.moveHistory.isNotEmpty() && !state.isEngineThinking,
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = DarkCardBg,
+                contentColor = Color.White,
+                disabledContainerColor = DarkCardBg.copy(alpha = 0.5f),
+                disabledContentColor = Color(0xFF64748B)
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .testTag("btn_bottom_undo")
+        ) {
+            Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Undo", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium)
+        }
+
+        // Dark Pill "Modes" Button
+        FilledTonalButton(
+            onClick = onOpenModes,
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = DarkCardBg,
+                contentColor = Color.White
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .testTag("btn_bottom_modes")
+        ) {
+            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Modes", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium)
+        }
+
+        // Dark Tool Square (PGN / Copy / Flip)
+        FilledTonalIconButton(
+            onClick = onExportPgn,
+            shape = RoundedCornerShape(10.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = DarkCardBg,
+                contentColor = Color.White
+            ),
+            modifier = Modifier
+                .size(if (isLandscape) 44.dp else 48.dp)
+                .border(1.dp, DarkCardBorder, RoundedCornerShape(10.dp))
+                .testTag("btn_bottom_pgn")
+        ) {
+            Icon(Icons.Default.ContentCopy, contentDescription = "Export PGN", modifier = Modifier.size(18.dp))
+        }
+
+        // Dark Tool Square (Flip)
+        FilledTonalIconButton(
+            onClick = onFlipBoard,
+            shape = RoundedCornerShape(10.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = DarkCardBg,
+                contentColor = Color.White
+            ),
+            modifier = Modifier
+                .size(if (isLandscape) 44.dp else 48.dp)
+                .border(1.dp, DarkCardBorder, RoundedCornerShape(10.dp))
+                .testTag("btn_bottom_flip")
+        ) {
+            Icon(Icons.Default.SwapVert, contentDescription = "Flip Board", modifier = Modifier.size(18.dp))
+        }
     }
 }
