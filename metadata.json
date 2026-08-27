@@ -1,0 +1,6 @@
+{
+  "name": "Chess Master Pro",
+  "description": "A complete production-ready Chess game featuring UCI & OEX engine integration, 2D/3D board views, assistant mode, Room match history, and move validation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
