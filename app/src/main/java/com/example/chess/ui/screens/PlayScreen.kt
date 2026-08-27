@@ -369,6 +369,53 @@ fun PlayScreen(
             }
         )
     }
+
+    // Engine Alert / Error Dialog
+    if (state.engineErrorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.clearEngineError() },
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Chess Engine Alert",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            },
+            text = {
+                Text(
+                    text = state.engineErrorMessage ?: "",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFCBD5E1)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearEngineError()
+                        onOpenSettings()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandGreen, contentColor = Color.Black)
+                ) {
+                    Text("Engine Setup", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.clearEngineError() }) {
+                    Text("Dismiss", color = Color.White.copy(alpha = 0.8f))
+                }
+            },
+            containerColor = DarkCardBg,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 }
 
 @Composable
@@ -767,10 +814,18 @@ private fun EvalInfoStrip(state: ChessGameState, isCompact: Boolean) {
         }
 
         Text(
-            text = if (state.isEngineThinking) "Thinking..." else "Ready",
+            text = when {
+                !state.isExternalEngineRunning -> "Engine Offline"
+                state.isEngineThinking -> "Thinking..."
+                else -> "Ready"
+            },
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            color = if (state.isEngineThinking) Color(0xFFF59E0B) else BrandGreen
+            color = when {
+                !state.isExternalEngineRunning -> Color(0xFFEF4444)
+                state.isEngineThinking -> Color(0xFFF59E0B)
+                else -> BrandGreen
+            }
         )
     }
 }

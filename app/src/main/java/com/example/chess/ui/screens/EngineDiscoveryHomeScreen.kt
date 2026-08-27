@@ -293,7 +293,7 @@ fun EngineDiscoveryHomeScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
                         )
                     ) {
                         Column(
@@ -303,21 +303,21 @@ fun EngineDiscoveryHomeScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Icon(
-                                Icons.Default.SentimentDissatisfied,
+                                Icons.Default.Warning,
                                 contentDescription = null,
                                 modifier = Modifier.size(36.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = MaterialTheme.colorScheme.error
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = "No engine detected.",
+                                text = "No external engine detected.",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "No external Stockfish/OEX APK found on device. You can use the high-performance Built-in Grandmaster AI or import a custom engine file below.",
+                                text = "An external chess engine (like Stockfish or Komodo) is required. Please install an engine APK or tap 'Open Downloads & Select File' below to load your engine.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -402,78 +402,6 @@ fun EngineDiscoveryHomeScreen(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                             }
-                        }
-                    }
-                }
-            }
-
-            // Option: Built-in Grandmaster AI
-            item {
-                val isBuiltInSelected = state.selectedOexEngineId == null
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            viewModel.selectEngine(null)
-                            onEngineSelected(null)
-                        }
-                        .testTag("engine_builtin"),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isBuiltInSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Psychology,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            Column {
-                                Text(
-                                    text = "Built-in Grandmaster AI",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isBuiltInSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Native Alpha-Beta + Quiescence (Offline)",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isBuiltInSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Button(
-                            onClick = {
-                                viewModel.selectEngine(null)
-                                onEngineSelected(null)
-                            },
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(if (isBuiltInSelected) "Active" else "Select")
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                         }
                     }
                 }

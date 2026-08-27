@@ -273,62 +273,22 @@ fun SettingsScreen(
                     }
                 }
 
-                // Option: Built-in Engine
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (state.selectedOexEngineId == null) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.selectEngine(null) }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Built-in Grandmaster AI",
-                                fontWeight = FontWeight.Bold,
-                                color = if (state.selectedOexEngineId == null) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Native Alpha-Beta + Quiescence (Offline)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (state.selectedOexEngineId == null) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (state.selectedOexEngineId == null) {
-                            Text(
-                                text = "ACTIVE",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
-                            TextButton(onClick = { viewModel.selectEngine(null) }) {
-                                Text("Select")
-                            }
-                        }
-                    }
-                }
-
                 if (discoveredEngines.isEmpty()) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = "Searching for Installed Engines...",
+                                text = "No External Engine Detected",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.error
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Ensure your Stockfish / Komodo engine is installed. Tap 'Scan' above to refresh.",
+                                text = "Ensure Stockfish, Komodo, or an OEX engine is installed, or import one via Engine Setup.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

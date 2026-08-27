@@ -55,10 +55,11 @@ data class ChessGameState(
     val activePuzzle: PuzzleRecord? = null,
     val puzzleMoveIndex: Int = 0,
     val puzzleMessage: String? = null,
-    val activeEngineName: String = "Built-in Grandmaster AI",
+    val activeEngineName: String = "No Engine Detected",
     val selectedOexEngineId: String? = null,
     val isStockfishActive: Boolean = false,
-    val isExternalEngineRunning: Boolean = false
+    val isExternalEngineRunning: Boolean = false,
+    val engineErrorMessage: String? = null
 ) {
     val isGameOver: Boolean
         get() = status != GameStatus.IN_PROGRESS

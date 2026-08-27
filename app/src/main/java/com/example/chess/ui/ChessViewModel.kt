@@ -14,7 +14,6 @@ import com.example.chess.data.ChessDatabase
 import com.example.chess.data.ChessRepository
 import com.example.chess.data.GameRecord
 import com.example.chess.data.PuzzleRecord
-import com.example.chess.engine.AlphaBetaEngine
 import com.example.chess.engine.OexEngineInfo
 import com.example.chess.engine.OexEngineManager
 import com.example.chess.model.*
@@ -31,7 +30,6 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = ChessDatabase.getDatabase(application, viewModelScope)
     private val repository = ChessRepository(db.chessDao())
-    private val alphaBetaEngine = AlphaBetaEngine()
     private val oexEngineManager = OexEngineManager(application)
     private val soundManager = ChessSoundManager()
 
@@ -55,6 +53,10 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         updateAssistantEvaluation()
     }
 
+    fun clearEngineError() {
+        _uiState.update { it.copy(engineErrorMessage = null) }
+    }
+
     fun scanOexEngines() {
         viewModelScope.launch {
             val engines = oexEngineManager.discoverEngines()
@@ -75,9 +77,10 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         selectedOexEngineId = null,
-                        activeEngineName = "Built-in Grandmaster AI",
+                        activeEngineName = "No Engine Selected",
                         isStockfishActive = false,
-                        isExternalEngineRunning = false
+                        isExternalEngineRunning = false,
+                        engineErrorMessage = "No chess engine selected. Please select or import an engine to play."
                     )
                 }
             } else {
@@ -85,9 +88,10 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         selectedOexEngineId = engine.id,
-                        activeEngineName = engine.name,
+                        activeEngineName = if (started) engine.name else "${engine.name} (Start Failed)",
                         isStockfishActive = engine.isStockfish,
-                        isExternalEngineRunning = started
+                        isExternalEngineRunning = started,
+                        engineErrorMessage = if (!started) "Failed to start ${engine.name}. Binary may lack execution permission." else null
                     )
                 }
             }
@@ -361,53 +365,40 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     private fun triggerAiMove(currentPos: ChessPosition) {
         aiJob?.cancel()
         aiJob = viewModelScope.launch {
-            _uiState.update { it.copy(isEngineThinking = true) }
+            _uiState.update { it.copy(isEngineThinking = true, engineErrorMessage = null) }
             val state = _uiState.value
             val movesUci = state.moveHistory.map { it.uci }
 
-            if (state.isExternalEngineRunning && oexEngineManager.isRunning) {
-                // Use Stockfish 18 / External UCI Engine
-                val oexResult = oexEngineManager.findBestMove(
-                    fen = currentPos.toFen(),
-                    movesUci = movesUci,
-                    depth = state.aiSearchDepth,
-                    moveTimeMs = state.aiMoveTimeMs
-                ) { scoreCp, mateIn, _, _ ->
-                    _uiState.update {
-                        it.copy(
-                            engineEvaluationCp = scoreCp,
-                            engineMateIn = mateIn
-                        )
-                    }
-                }
-
-                _uiState.update {
-                    it.copy(
-                        isEngineThinking = false,
-                        engineEvaluationCp = oexResult?.scoreCp ?: 0,
-                        engineMateIn = oexResult?.mateIn
-                    )
-                }
-
-                val bestMoveUci = oexResult?.bestMoveUci
-                val matchingMove = bestMoveUci?.let { parseUciToLegalMove(it, currentPos) }
-                if (matchingMove != null && _uiState.value.status == GameStatus.IN_PROGRESS) {
-                    executeMove(matchingMove)
-                    return@launch
+            // Ensure external engine is running
+            var isEngineActive = state.isExternalEngineRunning && oexEngineManager.isRunning
+            if (!isEngineActive && state.selectedOexEngineId != null) {
+                val selectedEngine = _discoveredOexEngines.value.find { it.id == state.selectedOexEngineId }
+                if (selectedEngine != null) {
+                    isEngineActive = oexEngineManager.startEngine(selectedEngine)
+                    _uiState.update { it.copy(isExternalEngineRunning = isEngineActive) }
                 }
             }
 
-            // Fallback or Primary: Built-in Grandmaster Alpha-Beta engine with Opening Book
-            val eval = alphaBetaEngine.findBestMove(
-                position = currentPos,
-                moveHistoryUci = movesUci,
-                maxDepth = state.aiSearchDepth,
-                timeLimitMs = state.aiMoveTimeMs
-            ) { progress ->
+            if (!isEngineActive || !oexEngineManager.isRunning) {
                 _uiState.update {
                     it.copy(
-                        engineEvaluationCp = progress.scoreCp,
-                        engineMateIn = progress.mateIn
+                        isEngineThinking = false,
+                        engineErrorMessage = "No Chess Engine Active!\n\nPlease select or import an external engine (e.g. Stockfish) from Engine Discovery to play."
+                    )
+                }
+                return@launch
+            }
+
+            val oexResult = oexEngineManager.findBestMove(
+                fen = currentPos.toFen(),
+                movesUci = movesUci,
+                depth = state.aiSearchDepth,
+                moveTimeMs = state.aiMoveTimeMs
+            ) { scoreCp, mateIn, _, _ ->
+                _uiState.update {
+                    it.copy(
+                        engineEvaluationCp = scoreCp,
+                        engineMateIn = mateIn
                     )
                 }
             }
@@ -415,13 +406,22 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update {
                 it.copy(
                     isEngineThinking = false,
-                    engineEvaluationCp = eval.scoreCp,
-                    engineMateIn = eval.mateIn
+                    engineEvaluationCp = oexResult?.scoreCp ?: 0,
+                    engineMateIn = oexResult?.mateIn
                 )
             }
 
-            if (eval.bestMove != null && _uiState.value.status == GameStatus.IN_PROGRESS) {
-                executeMove(eval.bestMove)
+            val bestMoveUci = oexResult?.bestMoveUci
+            val matchingMove = bestMoveUci?.let { parseUciToLegalMove(it, currentPos) }
+
+            if (matchingMove != null && _uiState.value.status == GameStatus.IN_PROGRESS) {
+                executeMove(matchingMove)
+            } else if (matchingMove == null && _uiState.value.status == GameStatus.IN_PROGRESS) {
+                _uiState.update {
+                    it.copy(
+                        engineErrorMessage = "Engine Error: External engine failed to calculate a move. Check engine logs or binary permissions."
+                    )
+                }
             }
         }
     }
@@ -429,63 +429,63 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     private fun triggerHelperBotMove(currentPos: ChessPosition) {
         aiJob?.cancel()
         aiJob = viewModelScope.launch {
-            _uiState.update { it.copy(isEngineThinking = true) }
+            _uiState.update { it.copy(isEngineThinking = true, engineErrorMessage = null) }
             val state = _uiState.value
             val movesUci = state.moveHistory.map { it.uci }
 
-            var calculatedMove: ChessMove? = null
-            var calculatedScoreCp = 0
-            var calculatedMateIn: Int? = null
-
-            if (state.isExternalEngineRunning && oexEngineManager.isRunning) {
-                // Calculate with external engine (Stockfish 18)
-                val oexResult = oexEngineManager.findBestMove(
-                    fen = currentPos.toFen(),
-                    movesUci = movesUci,
-                    depth = state.aiSearchDepth,
-                    moveTimeMs = state.aiMoveTimeMs
-                ) { scoreCp, mateIn, _, _ ->
-                    _uiState.update {
-                        it.copy(
-                            engineEvaluationCp = scoreCp,
-                            engineMateIn = mateIn
-                        )
-                    }
+            var isEngineActive = state.isExternalEngineRunning && oexEngineManager.isRunning
+            if (!isEngineActive && state.selectedOexEngineId != null) {
+                val selectedEngine = _discoveredOexEngines.value.find { it.id == state.selectedOexEngineId }
+                if (selectedEngine != null) {
+                    isEngineActive = oexEngineManager.startEngine(selectedEngine)
+                    _uiState.update { it.copy(isExternalEngineRunning = isEngineActive) }
                 }
-                calculatedMove = oexResult?.bestMoveUci?.let { parseUciToLegalMove(it, currentPos) }
-                calculatedScoreCp = oexResult?.scoreCp ?: 0
-                calculatedMateIn = oexResult?.mateIn
             }
 
-            if (calculatedMove == null) {
-                // Fallback to built-in Alpha-Beta with Opening Book
-                val eval = alphaBetaEngine.findBestMove(
-                    position = currentPos,
-                    moveHistoryUci = movesUci,
-                    maxDepth = state.aiSearchDepth,
-                    timeLimitMs = state.aiMoveTimeMs
-                )
-                calculatedMove = eval.bestMove
-                calculatedScoreCp = eval.scoreCp
-                calculatedMateIn = eval.mateIn
+            if (!isEngineActive || !oexEngineManager.isRunning) {
+                _uiState.update {
+                    it.copy(
+                        isEngineThinking = false,
+                        engineErrorMessage = "No Chess Engine Active!\n\nPlease select or import an external engine for Helper Bot."
+                    )
+                }
+                return@launch
             }
 
-            // Draw the recommendation arrow on board
+            val oexResult = oexEngineManager.findBestMove(
+                fen = currentPos.toFen(),
+                movesUci = movesUci,
+                depth = state.aiSearchDepth,
+                moveTimeMs = state.aiMoveTimeMs
+            ) { scoreCp, mateIn, _, _ ->
+                _uiState.update {
+                    it.copy(
+                        engineEvaluationCp = scoreCp,
+                        engineMateIn = mateIn
+                    )
+                }
+            }
+
+            val calculatedMove = oexResult?.bestMoveUci?.let { parseUciToLegalMove(it, currentPos) }
+            val calculatedScoreCp = oexResult?.scoreCp ?: 0
+            val calculatedMateIn = oexResult?.mateIn
+
             _uiState.update {
                 it.copy(
                     isEngineThinking = false,
                     engineArrowMove = calculatedMove,
                     engineEvaluationCp = calculatedScoreCp,
-                    engineMateIn = calculatedMateIn
+                    engineMateIn = calculatedMateIn,
+                    engineErrorMessage = if (calculatedMove == null) "Engine Error: Could not calculate helper move." else null
                 )
             }
 
             // Helper bot plays automatically on its turn
-            if (calculatedMove != null && _uiState.value.status == GameStatus.IN_PROGRESS) {
+            if (calculatedMove != null && _uiState.value.status == GameStatus.IN_PROGRESS && _uiState.value.helperBotAutoPlay) {
                 delay(600) // Pacing so the selected arrow is noticed
                 val executedMove = calculatedMove
                 executeMove(executedMove)
-                // Clear arrow after helper bot plays so opponent does not get any suggestions!
+                // Clear arrow after helper bot plays so opponent does not get suggestions
                 _uiState.update { it.copy(engineArrowMove = null) }
             }
         }
@@ -520,38 +520,26 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            if (currentState.isExternalEngineRunning && oexEngineManager.isRunning) {
-                val oexResult = oexEngineManager.findBestMove(
-                    fen = pos.toFen(),
-                    movesUci = movesUci,
-                    depth = 10,
-                    moveTimeMs = 400
-                )
-                if (oexResult != null) {
-                    val arrowMove = oexResult.bestMoveUci?.let { parseUciToLegalMove(it, pos) }
-                    _uiState.update {
-                        it.copy(
-                            engineArrowMove = arrowMove,
-                            engineEvaluationCp = oexResult.scoreCp,
-                            engineMateIn = oexResult.mateIn
-                        )
-                    }
-                    return@launch
-                }
+            if (!currentState.isExternalEngineRunning || !oexEngineManager.isRunning) {
+                _uiState.update { it.copy(engineArrowMove = null) }
+                return@launch
             }
 
-            val eval = alphaBetaEngine.findBestMove(
-                position = pos,
-                moveHistoryUci = movesUci,
-                maxDepth = 5,
-                timeLimitMs = 400
+            val oexResult = oexEngineManager.findBestMove(
+                fen = pos.toFen(),
+                movesUci = movesUci,
+                depth = 10,
+                moveTimeMs = 400
             )
-            _uiState.update {
-                it.copy(
-                    engineArrowMove = eval.bestMove,
-                    engineEvaluationCp = eval.scoreCp,
-                    engineMateIn = eval.mateIn
-                )
+            if (oexResult != null) {
+                val arrowMove = oexResult.bestMoveUci?.let { parseUciToLegalMove(it, pos) }
+                _uiState.update {
+                    it.copy(
+                        engineArrowMove = arrowMove,
+                        engineEvaluationCp = oexResult.scoreCp,
+                        engineMateIn = oexResult.mateIn
+                    )
+                }
             }
         }
     }

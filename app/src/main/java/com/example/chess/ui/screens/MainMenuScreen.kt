@@ -62,7 +62,11 @@ fun MainMenuScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (state.isStockfishActive) Color(0xFF1B5E20) else MaterialTheme.colorScheme.primaryContainer
+                        containerColor = when {
+                            state.isStockfishActive -> Color(0xFF1B5E20)
+                            state.isExternalEngineRunning -> MaterialTheme.colorScheme.primaryContainer
+                            else -> MaterialTheme.colorScheme.errorContainer
+                        }
                     )
                 ) {
                     Row(
@@ -85,26 +89,30 @@ fun MainMenuScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (state.isStockfishActive) Icons.Default.Bolt else Icons.Default.SmartToy,
+                                    imageVector = when {
+                                        state.isStockfishActive -> Icons.Default.Bolt
+                                        state.isExternalEngineRunning -> Icons.Default.SmartToy
+                                        else -> Icons.Default.Warning
+                                    },
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = if (state.isExternalEngineRunning) Color.White else MaterialTheme.colorScheme.error,
                                     modifier = Modifier.size(28.dp)
                                 )
                             }
 
                             Column {
                                 Text(
-                                    text = "ACTIVE ENGINE",
+                                    text = if (state.isExternalEngineRunning) "ACTIVE ENGINE" else "ENGINE STATUS",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White.copy(alpha = 0.8f),
+                                    color = if (state.isExternalEngineRunning) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onErrorContainer,
                                     letterSpacing = 0.8.sp
                                 )
                                 Text(
                                     text = state.activeEngineName,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = if (state.isExternalEngineRunning) Color.White else MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
                         }
@@ -113,12 +121,12 @@ fun MainMenuScreen(
                             onClick = onChangeEngine,
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = Color.White.copy(alpha = 0.25f),
-                                contentColor = Color.White
+                                containerColor = if (state.isExternalEngineRunning) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.error,
+                                contentColor = if (state.isExternalEngineRunning) Color.White else MaterialTheme.colorScheme.onError
                             ),
                             modifier = Modifier.testTag("change_engine_button")
                         ) {
-                            Text("Switch", fontWeight = FontWeight.SemiBold)
+                            Text(if (state.isExternalEngineRunning) "Switch" else "Setup", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
