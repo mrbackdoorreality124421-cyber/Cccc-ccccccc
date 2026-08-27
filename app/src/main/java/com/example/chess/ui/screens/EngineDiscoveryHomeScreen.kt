@@ -1,10 +1,8 @@
 package com.example.chess.ui.screens
 
 import android.Manifest
-import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -26,10 +24,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.chess.engine.EngineInstallState
 import com.example.chess.engine.OexEngineInfo
 import com.example.chess.ui.ChessViewModel
 
@@ -43,20 +43,21 @@ fun EngineDiscoveryHomeScreen(
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     val discoveredEngines by viewModel.discoveredOexEngines.collectAsState()
+    val installState by viewModel.installState.collectAsState()
+    val specs = viewModel.deviceSpecs
 
     var isScanning by remember { mutableStateOf(false) }
     var isImportingCustom by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var customErrorMessage by remember { mutableStateOf<String?>(null) }
     var hasCheckedPermissions by remember { mutableStateOf(false) }
-    var permissionsGranted by remember { mutableStateOf(false) }
 
-    // Launcher for file picker to import custom engine from Downloads
+    // Launcher for file picker to import custom engine from Downloads / Storage
     val customEnginePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             isImportingCustom = true
-            errorMessage = null
+            customErrorMessage = null
             viewModel.importCustomEngine(uri) { success, msg ->
                 isImportingCustom = false
                 if (success) {
@@ -65,7 +66,7 @@ fun EngineDiscoveryHomeScreen(
                     }
                     onEngineSelected(currentSelected)
                 } else {
-                    errorMessage = msg
+                    customErrorMessage = msg
                 }
             }
         }
@@ -74,15 +75,13 @@ fun EngineDiscoveryHomeScreen(
     // Permission launcher for storage & device engine detection
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
+    ) {
         hasCheckedPermissions = true
-        val allGranted = permissions.values.all { it } || permissions.isEmpty()
-        permissionsGranted = allGranted
         isScanning = true
         viewModel.scanOexEngines()
     }
 
-    // Auto-scan on initial launch
+    // Auto-scan permissions on initial launch
     LaunchedEffect(Unit) {
         if (!hasCheckedPermissions) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -129,13 +128,13 @@ fun EngineDiscoveryHomeScreen(
                             .clip(CircleShape)
                             .background(
                                 Brush.linearGradient(
-                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
+                                    listOf(Color(0xFF2E7D32), Color(0xFF1565C0))
                                 )
                             ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Memory,
+                            imageVector = Icons.Default.Bolt,
                             contentDescription = "Chess Engine",
                             tint = Color.White,
                             modifier = Modifier.size(40.dp)
@@ -145,7 +144,7 @@ fun EngineDiscoveryHomeScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "Chess Engine Setup",
+                        text = "Stockfish 18 Auto-Engine",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
@@ -154,7 +153,7 @@ fun EngineDiscoveryHomeScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Select an installed engine or Stockfish 18 to power your game & bot analysis.",
+                        text = "Smart hardware detection, auto-download & instant setup for your Android device.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -162,72 +161,425 @@ fun EngineDiscoveryHomeScreen(
                 }
             }
 
-            // Permissions / Scan Status Card
+            // Step 1: Device Detection Specs Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                    )
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    border = CardDefaults.outlinedCardBorder()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Scan",
-                                tint = MaterialTheme.colorScheme.primary
+                                Icons.Default.Memory,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Column {
-                                Text(
-                                    text = "Device Engine Scanner",
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                Text(
-                                    text = "Scans APKs & OEX engines on phone",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Text(
+                                text = "DEVICE HARDWARE SPECS",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 1.sp
+                            )
                         }
 
-                        Button(
-                            onClick = {
-                                isScanning = true
-                                viewModel.scanOexEngines()
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                            modifier = Modifier.testTag("scan_engines_button")
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Re-Scan")
+                            Text("CPU Architecture:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = "${specs.cpuArch.uppercase()} ${if (specs.hasDotProd) "(DotProd NNUE)" else ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Available RAM:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = "${specs.availableRamMb} MB / ${specs.totalRamMb} MB",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Target Build:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = specs.downloadFileName,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF2E7D32)
+                            )
                         }
                     }
                 }
             }
 
-            // Error Message (e.g. "Sorry, engine not detected.")
-            if (errorMessage != null) {
+            // Step 4 & 5: Live Auto-Installation Progress / Status Card
+            item {
+                when (val install = installState) {
+                    is EngineInstallState.Idle -> {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = CardDefaults.outlinedCardBorder()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "Ready to Setup Stockfish 18",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Tap below to auto-install the best engine for your device.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Button(
+                                    onClick = { viewModel.startStockfishAutoSetup(forceRedownload = false) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Auto-Download & Install", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    is EngineInstallState.CheckingLocal -> {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                                Column {
+                                    Text(
+                                        text = "Checking Local Storage...",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = install.message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    is EngineInstallState.Downloading -> {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = CardDefaults.outlinedCardBorder()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        Text(
+                                            text = "Downloading Chess Engine...",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                    }
+                                    Text(
+                                        text = "${install.progressPercent}%",
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF2E7D32)
+                                    )
+                                }
+
+                                LinearProgressIndicator(
+                                    progress = { install.progressPercent / 100f },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = Color(0xFF2E7D32)
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "${install.bytesDownloaded / (1024 * 1024)} MB / ${if (install.totalBytes > 0) "${install.totalBytes / (1024 * 1024)} MB" else "..."}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "${install.speedKbps} KB/s (Attempt ${install.attempt}/${install.maxAttempts})",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    is EngineInstallState.Extracting -> {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp, color = Color(0xFF2E7D32))
+                                Column {
+                                    Text(
+                                        text = "Unpacking & Setting Permissions...",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = install.message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    is EngineInstallState.Verifying -> {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                                Column {
+                                    Text(
+                                        text = "Verifying Engine Handshake...",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = install.message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    is EngineInstallState.Ready -> {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32).copy(alpha = 0.15f)),
+                            border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(Color(0xFF2E7D32), Color(0xFF4CAF50))))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color(0xFF2E7D32),
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "Stockfish 18 Connected & Active",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = Color(0xFF2E7D32)
+                                        )
+                                        Text(
+                                            text = install.source,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { onEngineSelected(install.engine) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Continue to Main Menu / Play Board", fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    is EngineInstallState.Error -> {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "Download Notice",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        Text(
+                                            text = install.errorMessage,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.startStockfishAutoSetup(forceRedownload = true) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Retry Download", fontSize = 12.sp)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            isImportingCustom = true
+                                            customErrorMessage = null
+                                            viewModel.autoDetectStockfishFromDownloads { success, msg ->
+                                                isImportingCustom = false
+                                                if (success) {
+                                                    val currentSelected = state.selectedOexEngineId?.let { id ->
+                                                        viewModel.discoveredOexEngines.value.find { it.id == id }
+                                                    }
+                                                    onEngineSelected(currentSelected)
+                                                } else {
+                                                    customErrorMessage = msg
+                                                }
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Scan Downloads", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Custom Error Message Toast / Card
+            if (customErrorMessage != null) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                     ) {
                         Row(
                             modifier = Modifier
@@ -236,24 +588,16 @@ fun EngineDiscoveryHomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                             Text(
-                                text = errorMessage ?: "",
+                                text = customErrorMessage ?: "",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 modifier = Modifier.weight(1f)
                             )
-                            IconButton(onClick = { errorMessage = null }) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Dismiss",
-                                    tint = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                            IconButton(onClick = { customErrorMessage = null }) {
+                                Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onErrorContainer)
                             }
                         }
                     }
@@ -277,7 +621,7 @@ fun EngineDiscoveryHomeScreen(
 
                     if (discoveredEngines.isNotEmpty()) {
                         Text(
-                            text = "${discoveredEngines.size} found",
+                            text = "${discoveredEngines.size} ready",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -285,47 +629,8 @@ fun EngineDiscoveryHomeScreen(
                 }
             }
 
-            // If No External Engines Found
-            if (discoveredEngines.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.Warning,
-                                contentDescription = null,
-                                modifier = Modifier.size(36.dp),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "No external engine detected.",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "An external chess engine (like Stockfish or Komodo) is required. Please install an engine APK or tap 'Open Downloads & Select File' below to load your engine.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            } else {
-                // List of detected engines
+            // If engines found, display them
+            if (discoveredEngines.isNotEmpty()) {
                 items(discoveredEngines, key = { it.id }) { eng ->
                     val isSelected = state.selectedOexEngineId == eng.id
                     Card(
@@ -378,7 +683,7 @@ fun EngineDiscoveryHomeScreen(
                                         color = if (isSelected) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = if (eng.isStockfish) "Stockfish UCI Engine • Ready" else "${eng.version} • ${eng.packageName}",
+                                        text = if (eng.isStockfish) "Stockfish UCI Engine • Active" else "${eng.version} • ${eng.packageName}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -406,11 +711,11 @@ fun EngineDiscoveryHomeScreen(
                 }
             }
 
-            // Section: Custom Engine Add Option
+            // Section: Manual Options (Scan Downloads / Pick .tar)
             item {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "STOCKFISH .TAR / ARCHIVE IMPORT",
+                    text = "DOWNLOADS / LOCAL FILE OPTIONS",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -422,9 +727,7 @@ fun EngineDiscoveryHomeScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     border = CardDefaults.outlinedCardBorder()
                 ) {
                     Column(
@@ -433,33 +736,16 @@ fun EngineDiscoveryHomeScreen(
                             .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF2E7D32).copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Bolt,
-                                contentDescription = null,
-                                tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(30.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
                         Text(
-                            text = "Stockfish 18 Auto-Setup",
+                            text = "Manual Import / Storage Search",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "Select your downloaded 'stockfish-android-armv8-dotprod.tar'. The app will automatically extract, configure permissions, and run Stockfish without any manual steps!",
+                            text = "If you have already downloaded 'stockfish-android-armv8-dotprod.tar' into Downloads, select it here to extract and activate immediately.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -467,11 +753,11 @@ fun EngineDiscoveryHomeScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Primary Button 1: 1-Tap Auto-Scan Downloads
+                        // 1-Tap Auto-Scan Downloads
                         Button(
                             onClick = {
                                 isImportingCustom = true
-                                errorMessage = null
+                                customErrorMessage = null
                                 viewModel.autoDetectStockfishFromDownloads { success, msg ->
                                     isImportingCustom = false
                                     if (success) {
@@ -480,7 +766,7 @@ fun EngineDiscoveryHomeScreen(
                                         }
                                         onEngineSelected(currentSelected)
                                     } else {
-                                        errorMessage = msg
+                                        customErrorMessage = msg
                                     }
                                 }
                             },
@@ -494,7 +780,7 @@ fun EngineDiscoveryHomeScreen(
                             if (isImportingCustom) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Extracting & Starting Stockfish...", color = Color.White)
+                                Text("Unpacking & Connecting...", color = Color.White)
                             } else {
                                 Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.White)
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -504,11 +790,9 @@ fun EngineDiscoveryHomeScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Primary Button 2: Open File Picker for .tar
+                        // Select .tar file
                         OutlinedButton(
-                            onClick = {
-                                customEnginePickerLauncher.launch("*/*")
-                            },
+                            onClick = { customEnginePickerLauncher.launch("*/*") },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()

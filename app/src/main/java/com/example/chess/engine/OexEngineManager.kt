@@ -328,7 +328,7 @@ class OexEngineManager(private val context: Context) {
         }
     }
 
-    private fun saveCustomEngine(info: OexEngineInfo) {
+    fun saveCustomEngine(info: OexEngineInfo) {
         val current = customEnginesPrefs.getStringSet("custom_engine_ids", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
         current.add(info.id)
         customEnginesPrefs.edit()

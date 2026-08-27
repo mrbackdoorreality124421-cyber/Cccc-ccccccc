@@ -14,8 +14,7 @@ import com.example.chess.data.ChessDatabase
 import com.example.chess.data.ChessRepository
 import com.example.chess.data.GameRecord
 import com.example.chess.data.PuzzleRecord
-import com.example.chess.engine.OexEngineInfo
-import com.example.chess.engine.OexEngineManager
+import com.example.chess.engine.*
 import com.example.chess.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,6 +31,10 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository(db.chessDao())
     private val oexEngineManager = OexEngineManager(application)
     private val soundManager = ChessSoundManager()
+    val stockfishDownloader = StockfishDownloader(application, oexEngineManager)
+    val installState = stockfishDownloader.installState
+
+    val deviceSpecs = DeviceSpecsDetector.detect(application)
 
     private val _uiState = MutableStateFlow(ChessGameState())
     val uiState: StateFlow<ChessGameState> = _uiState.asStateFlow()
@@ -50,7 +53,21 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.seedDefaultPuzzlesIfEmpty()
         }
+        viewModelScope.launch {
+            installState.collect { state ->
+                if (state is com.example.chess.engine.EngineInstallState.Ready) {
+                    val engines = oexEngineManager.discoverEngines()
+                    _discoveredOexEngines.value = engines
+                    selectEngine(state.engine)
+                }
+            }
+        }
+        startStockfishAutoSetup(forceRedownload = false)
         updateAssistantEvaluation()
+    }
+
+    fun startStockfishAutoSetup(forceRedownload: Boolean = false) {
+        stockfishDownloader.startAutoSetup(forceRedownload = forceRedownload)
     }
 
     fun clearEngineError() {
