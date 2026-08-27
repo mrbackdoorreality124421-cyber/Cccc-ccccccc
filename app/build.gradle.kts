@@ -142,3 +142,52 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+tasks.register("downloadStockfish") {
+    val arm64Lib = file("src/main/jniLibs/arm64-v8a/libstockfish.so")
+    val arm32Lib = file("src/main/jniLibs/armeabi-v7a/libstockfish.so")
+    
+    outputs.file(arm64Lib)
+    outputs.file(arm32Lib)
+
+    doLast {
+        arm64Lib.parentFile.mkdirs()
+        arm32Lib.parentFile.mkdirs()
+        
+        if (!arm64Lib.exists()) {
+            println("Downloading Stockfish ARM64...")
+            val tarFile = file("build/tmp/sf64.tar")
+            tarFile.parentFile.mkdirs()
+            java.net.URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv8.tar").openStream().use { input ->
+                java.io.FileOutputStream(tarFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            copy {
+                from(tarTree(tarFile))
+                into("build/tmp/sf64_out")
+            }
+            file("build/tmp/sf64_out/stockfish/stockfish-android-armv8").renameTo(arm64Lib)
+        }
+        
+        if (!arm32Lib.exists()) {
+            println("Downloading Stockfish ARM32...")
+            val tarFile = file("build/tmp/sf32.tar")
+            tarFile.parentFile.mkdirs()
+            java.net.URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv7.tar").openStream().use { input ->
+                java.io.FileOutputStream(tarFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            copy {
+                from(tarTree(tarFile))
+                into("build/tmp/sf32_out")
+            }
+            file("build/tmp/sf32_out/stockfish/stockfish-android-armv7").renameTo(arm32Lib)
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("downloadStockfish")
+}

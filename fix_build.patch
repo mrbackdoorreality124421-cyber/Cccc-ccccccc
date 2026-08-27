@@ -1,0 +1,33 @@
+--- app/build.gradle.kts
++++ app/build.gradle.kts
+@@ -131,14 +131,21 @@
+             println("Downloading Stockfish ARM64...")
+             val tarFile = file("build/tmp/sf64.tar")
+             tarFile.parentFile.mkdirs()
+-            ant.invokeMethod("get", mapOf("src" to "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv8.tar", "dest" to tarFile))
++            java.net.URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv8.tar").openStream().use { input ->
++                java.io.FileOutputStream(tarFile).use { output ->
++                    input.copyTo(output)
++                }
++            }
+             copy {
+                 from(tarTree(tarFile))
+                 into("build/tmp/sf64_out")
+             }
+             file("build/tmp/sf64_out/stockfish/stockfish-android-armv8").renameTo(arm64Lib)
+         }
+         
+         if (!arm32Lib.exists()) {
+             println("Downloading Stockfish ARM32...")
+             val tarFile = file("build/tmp/sf32.tar")
+             tarFile.parentFile.mkdirs()
+-            ant.invokeMethod("get", mapOf("src" to "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv7.tar", "dest" to tarFile))
++            java.net.URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv7.tar").openStream().use { input ->
++                java.io.FileOutputStream(tarFile).use { output ->
++                    input.copyTo(output)
++                }
++            }
+             copy {
+                 from(tarTree(tarFile))
+                 into("build/tmp/sf32_out")
+             }
