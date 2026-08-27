@@ -17,7 +17,6 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.example.chess.model.*
 import kotlin.math.atan2
@@ -41,28 +40,36 @@ fun ChessBoard2D(
         modifier = modifier.aspectRatio(1f),
         contentAlignment = Alignment.Center
     ) {
-        val density = LocalDensity.current
-
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(4.dp)
+                .padding(2.dp)
                 .pointerInput(orientation, position) {
                     detectTapGestures { offset ->
-                        val boardWidth = size.width
-                        val sqSize = boardWidth / 8f
-                        val col = (offset.x / sqSize).toInt().coerceIn(0, 7)
-                        val row = (offset.y / sqSize).toInt().coerceIn(0, 7)
+                        val boardDim = min(size.width.toFloat(), size.height.toFloat())
+                        val startX = (size.width - boardDim) / 2f
+                        val startY = (size.height - boardDim) / 2f
 
-                        val file = if (orientation == PieceColor.WHITE) col else 7 - col
-                        val rank = if (orientation == PieceColor.WHITE) 7 - row else row
+                        val relX = offset.x - startX
+                        val relY = offset.y - startY
 
-                        onSquareClicked(Square(file, rank))
+                        if (relX in 0f..boardDim && relY in 0f..boardDim) {
+                            val sqSize = boardDim / 8f
+                            val col = (relX / sqSize).toInt().coerceIn(0, 7)
+                            val row = (relY / sqSize).toInt().coerceIn(0, 7)
+
+                            val file = if (orientation == PieceColor.WHITE) col else 7 - col
+                            val rank = if (orientation == PieceColor.WHITE) 7 - row else row
+
+                            onSquareClicked(Square(file, rank))
+                        }
                     }
                 }
         ) {
             val boardDim = min(size.width, size.height)
             val sqSize = boardDim / 8f
+            val startX = (size.width - boardDim) / 2f
+            val startY = (size.height - boardDim) / 2f
 
             val lightColor = Color(theme.lightColor)
             val darkColor = Color(theme.darkColor)
@@ -75,7 +82,7 @@ fun ChessBoard2D(
                 for (c in 0..7) {
                     val isLight = (r + c) % 2 == 0
                     val rectColor = if (isLight) lightColor else darkColor
-                    val squareOffset = Offset(c * sqSize, r * sqSize)
+                    val squareOffset = Offset(startX + c * sqSize, startY + r * sqSize)
 
                     drawRect(
                         color = rectColor,
@@ -122,7 +129,7 @@ fun ChessBoard2D(
                         val fileLetter = ('a'.code + file).toChar().toString()
                         drawCoordinateText(
                             text = fileLetter,
-                            offset = Offset(c * sqSize + sqSize - 14f, r * sqSize + sqSize - 4f),
+                            offset = Offset(startX + c * sqSize + sqSize - (sqSize * 0.18f), startY + r * sqSize + sqSize - (sqSize * 0.05f)),
                             textColor = if (isLight) darkColor else lightColor,
                             textSizePx = sqSize * 0.22f
                         )
@@ -131,7 +138,7 @@ fun ChessBoard2D(
                         val rankNumber = (rank + 1).toString()
                         drawCoordinateText(
                             text = rankNumber,
-                            offset = Offset(c * sqSize + 4f, r * sqSize + 16f),
+                            offset = Offset(startX + c * sqSize + (sqSize * 0.06f), startY + r * sqSize + (sqSize * 0.22f)),
                             textColor = if (isLight) darkColor else lightColor,
                             textSizePx = sqSize * 0.22f
                         )
@@ -144,7 +151,7 @@ fun ChessBoard2D(
             for (move in legalMoves) {
                 val c = if (orientation == PieceColor.WHITE) move.to.file else 7 - move.to.file
                 val r = if (orientation == PieceColor.WHITE) 7 - move.to.rank else move.to.rank
-                val center = Offset((c + 0.5f) * sqSize, (r + 0.5f) * sqSize)
+                val center = Offset(startX + (c + 0.5f) * sqSize, startY + (r + 0.5f) * sqSize)
 
                 if (move.isCapture) {
                     drawCircle(
@@ -171,7 +178,7 @@ fun ChessBoard2D(
                     if (piece != null) {
                         drawPieceSymbol(
                             piece = piece,
-                            center = Offset((c + 0.5f) * sqSize, (r + 0.5f) * sqSize),
+                            center = Offset(startX + (c + 0.5f) * sqSize, startY + (r + 0.5f) * sqSize),
                             sqSize = sqSize
                         )
                     }
@@ -180,7 +187,7 @@ fun ChessBoard2D(
 
             // Engine Suggestion Arrow
             if (engineArrowMove != null) {
-                drawEngineArrow(engineArrowMove, orientation, sqSize)
+                drawEngineArrow(engineArrowMove, orientation, startX, startY, sqSize)
             }
         }
     }
@@ -243,6 +250,8 @@ private fun DrawScope.drawPieceSymbol(
 private fun DrawScope.drawEngineArrow(
     move: ChessMove,
     orientation: PieceColor,
+    startX: Float,
+    startY: Float,
     sqSize: Float
 ) {
     val fromC = if (orientation == PieceColor.WHITE) move.from.file else 7 - move.from.file
@@ -250,8 +259,8 @@ private fun DrawScope.drawEngineArrow(
     val toC = if (orientation == PieceColor.WHITE) move.to.file else 7 - move.to.file
     val toR = if (orientation == PieceColor.WHITE) 7 - move.to.rank else move.to.rank
 
-    val start = Offset((fromC + 0.5f) * sqSize, (fromR + 0.5f) * sqSize)
-    val end = Offset((toC + 0.5f) * sqSize, (toR + 0.5f) * sqSize)
+    val start = Offset(startX + (fromC + 0.5f) * sqSize, startY + (fromR + 0.5f) * sqSize)
+    val end = Offset(startX + (toC + 0.5f) * sqSize, startY + (toR + 0.5f) * sqSize)
 
     val arrowColor = Color(0xEE10B981)
     val strokeWidth = sqSize * 0.12f

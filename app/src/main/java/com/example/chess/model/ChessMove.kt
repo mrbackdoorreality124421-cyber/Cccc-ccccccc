@@ -12,6 +12,9 @@ data class ChessMove(
     val isEnPassant: Boolean = false,
     val san: String = ""
 ) {
+    val isCastle: Boolean
+        get() = isCastleKingside || isCastleQueenside
+
     val uci: String
         get() {
             val promo = when (promotion) {

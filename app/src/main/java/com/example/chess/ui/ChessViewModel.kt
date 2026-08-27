@@ -9,6 +9,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.chess.audio.ChessSoundManager
 import com.example.chess.data.ChessDatabase
 import com.example.chess.data.ChessRepository
 import com.example.chess.data.GameRecord
@@ -32,6 +33,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository(db.chessDao())
     private val alphaBetaEngine = AlphaBetaEngine()
     private val oexEngineManager = OexEngineManager(application)
+    private val soundManager = ChessSoundManager()
 
     private val _uiState = MutableStateFlow(ChessGameState())
     val uiState: StateFlow<ChessGameState> = _uiState.asStateFlow()
@@ -266,6 +268,17 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
             vibrate(18)
         }
 
+        // Real Acoustic Chess Sounds
+        if (currentState.isSoundEnabled) {
+            when {
+                status == GameStatus.CHECKMATE -> soundManager.playGameOverSound()
+                isCheck -> soundManager.playCheckSound()
+                move.isCastle -> soundManager.playCastleSound()
+                move.isCapture -> soundManager.playCaptureSound()
+                else -> soundManager.playMoveSound()
+            }
+        }
+
         _uiState.update {
             it.copy(
                 position = nextPos,
@@ -479,23 +492,46 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            // If auto-play is enabled for helper bot, execute the move after giving user clear visual indication
-            if (state.helperBotAutoPlay && calculatedMove != null && _uiState.value.status == GameStatus.IN_PROGRESS) {
-                delay(700) // Visual pacing so arrow is noticed
+            // Helper bot plays automatically on its turn
+            if (calculatedMove != null && _uiState.value.status == GameStatus.IN_PROGRESS) {
+                delay(600) // Pacing so the selected arrow is noticed
                 val executedMove = calculatedMove
                 executeMove(executedMove)
-                // Keep the arrow visible on board for clarity
-                _uiState.update { it.copy(engineArrowMove = executedMove) }
+                // Clear arrow after helper bot plays so opponent does not get any suggestions!
+                _uiState.update { it.copy(engineArrowMove = null) }
             }
         }
     }
 
     fun updateAssistantEvaluation() {
-        if (!_uiState.value.isAssistantMode) return
-        val pos = _uiState.value.position
+        val state = _uiState.value
+        // Do NOT calculate or show suggestions for the opponent
+        if (state.gameMode == GameMode.PLAYER_VS_AI && state.position.activeColor != state.playerColor) {
+            _uiState.update { it.copy(engineArrowMove = null) }
+            return
+        }
+        if (state.gameMode == GameMode.HELPER_BOT && state.position.activeColor != state.helperBotColor) {
+            _uiState.update { it.copy(engineArrowMove = null) }
+            return
+        }
+        if (!state.isAssistantMode && state.gameMode != GameMode.ANALYSIS) {
+            _uiState.update { it.copy(engineArrowMove = null) }
+            return
+        }
+
+        val pos = state.position
         viewModelScope.launch(Dispatchers.Default) {
-            val state = _uiState.value
-            if (state.isExternalEngineRunning && oexEngineManager.isRunning) {
+            val currentState = _uiState.value
+            if (currentState.gameMode == GameMode.HELPER_BOT && currentState.position.activeColor != currentState.helperBotColor) {
+                _uiState.update { it.copy(engineArrowMove = null) }
+                return@launch
+            }
+            if (currentState.gameMode == GameMode.PLAYER_VS_AI && currentState.position.activeColor != currentState.playerColor) {
+                _uiState.update { it.copy(engineArrowMove = null) }
+                return@launch
+            }
+
+            if (currentState.isExternalEngineRunning && oexEngineManager.isRunning) {
                 val oexResult = oexEngineManager.findBestMove(
                     fen = pos.toFen(),
                     depth = 10,
@@ -682,6 +718,16 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             _uiState.update { it.copy(engineArrowMove = null) }
         }
+    }
+
+    fun toggleSound() {
+        val newSound = !_uiState.value.isSoundEnabled
+        _uiState.update { it.copy(isSoundEnabled = newSound) }
+        soundManager.isSoundEnabled = newSound
+    }
+
+    fun toggleHaptic() {
+        _uiState.update { it.copy(isHapticEnabled = !it.isHapticEnabled) }
     }
 
     fun setBoardTheme(theme: BoardTheme) {

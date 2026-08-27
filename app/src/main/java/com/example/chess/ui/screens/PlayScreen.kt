@@ -5,7 +5,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -20,7 +19,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.chess.model.GameMode
@@ -44,269 +42,285 @@ fun PlayScreen(
     var showPgnDialog by remember { mutableStateOf(false) }
     var pgnExportText by remember { mutableStateOf("") }
 
-    Column(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Navigation header (Back to Main Menu)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        val isCompact = maxWidth < 380.dp || maxHeight < 560.dp
+        val horizontalPadding = if (isCompact) 8.dp else 14.dp
+        val verticalSpacing = if (isCompact) 6.dp else 10.dp
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = horizontalPadding, vertical = if (isCompact) 4.dp else 8.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(verticalSpacing)
         ) {
-            OutlinedButton(
-                onClick = onBackToMenu,
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                modifier = Modifier.testTag("btn_back_to_menu")
-            ) {
-                Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Main Menu", style = MaterialTheme.typography.labelMedium)
-            }
-
-            if (state.gameMode == GameMode.HELPER_BOT) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilterChip(
-                        selected = state.helperBotAutoPlay,
-                        onClick = { viewModel.toggleHelperAutoPlay() },
-                        label = { Text(if (state.helperBotAutoPlay) "Auto: ON" else "Auto: PAUSED") },
-                        leadingIcon = {
-                            Icon(
-                                if (state.helperBotAutoPlay) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    )
-
-                    if (!state.helperBotAutoPlay) {
-                        FilledTonalButton(
-                            onClick = { viewModel.triggerManualHelperStep() },
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Text("Step Move", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Top Evaluation Bar (when assistant or PvE is active)
-        if (state.isAssistantMode || state.gameMode == GameMode.PLAYER_VS_AI || state.gameMode == GameMode.HELPER_BOT || state.gameMode == GameMode.ANALYSIS) {
-            EvaluationBar(
-                evalCp = state.engineEvaluationCp,
-                mateIn = state.engineMateIn,
-                isThinking = state.isEngineThinking
-            )
-        }
-
-        // Game Status / Puzzle Banner
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = when {
-                    state.status == GameStatus.CHECKMATE -> MaterialTheme.colorScheme.primaryContainer
-                    state.position.isKingInCheck(state.position.activeColor) -> MaterialTheme.colorScheme.errorContainer
-                    state.gameMode == GameMode.HELPER_BOT -> Color(0xFF2E7D32).copy(alpha = 0.15f)
-                    else -> MaterialTheme.colorScheme.surfaceVariant
-                }
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
+            // Navigation header (Back to Main Menu)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .widthIn(max = 520.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        val title = when (state.gameMode) {
-                            GameMode.PLAYER_VS_AI -> "Player vs Bot"
-                            GameMode.HELPER_BOT -> "Helper Bot (Plays & Guides with Arrows)"
-                            GameMode.PLAYER_VS_PLAYER -> "Pass & Play"
-                            GameMode.ANALYSIS -> "Analysis Board"
-                            GameMode.TACTICAL_PUZZLE -> "Tactical Puzzle"
-                        }
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (state.gameMode == GameMode.HELPER_BOT) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
+                OutlinedButton(
+                    onClick = onBackToMenu,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = if (isCompact) 8.dp else 12.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("btn_back_to_menu")
+                ) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Menu", style = MaterialTheme.typography.labelMedium)
+                }
 
-                        if (state.gameMode == GameMode.PLAYER_VS_AI || state.gameMode == GameMode.HELPER_BOT || state.isAssistantMode) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = if (state.isStockfishActive) Color(0xFF2E7D32).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant
-                            ) {
-                                Text(
-                                    text = if (state.isStockfishActive) "⚡ ${state.activeEngineName}" else "🤖 ${state.activeEngineName}",
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (state.isStockfishActive) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                    Text(
-                        text = state.puzzleMessage ?: state.statusDescription,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (state.position.isKingInCheck(state.position.activeColor)) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurface
+                // Sound & Audio quick toggle
+                IconButton(
+                    onClick = { viewModel.toggleSound() },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        if (state.isSoundEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                        contentDescription = "Toggle Sound",
+                        tint = if (state.isSoundEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
 
-                if (state.isEngineThinking) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+            // Top Evaluation Bar (when assistant or PvE is active)
+            if (state.isAssistantMode || state.gameMode == GameMode.PLAYER_VS_AI || state.gameMode == GameMode.HELPER_BOT || state.gameMode == GameMode.ANALYSIS) {
+                Box(modifier = Modifier.widthIn(max = 520.dp)) {
+                    EvaluationBar(
+                        evalCp = state.engineEvaluationCp,
+                        mateIn = state.engineMateIn,
+                        isThinking = state.isEngineThinking
+                    )
+                }
+            }
+
+            // Game Status Banner
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 520.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = when {
+                        state.status == GameStatus.CHECKMATE -> MaterialTheme.colorScheme.primaryContainer
+                        state.position.isKingInCheck(state.position.activeColor) -> MaterialTheme.colorScheme.errorContainer
+                        state.gameMode == GameMode.HELPER_BOT -> Color(0xFF2E7D32).copy(alpha = 0.15f)
+                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    }
+                ),
+                shape = RoundedCornerShape(if (isCompact) 10.dp else 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = if (isCompact) 10.dp else 14.dp, vertical = if (isCompact) 6.dp else 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val title = when (state.gameMode) {
+                                GameMode.PLAYER_VS_AI -> "Player vs Bot"
+                                GameMode.HELPER_BOT -> "Helper Mode (Plays automatically)"
+                                GameMode.PLAYER_VS_PLAYER -> "Pass & Play"
+                                GameMode.ANALYSIS -> "Analysis Board"
+                                GameMode.TACTICAL_PUZZLE -> "Tactical Puzzle"
+                            }
+                            Text(
+                                text = title,
+                                style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
+                                color = if (state.gameMode == GameMode.HELPER_BOT) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            if (state.gameMode == GameMode.PLAYER_VS_AI || state.gameMode == GameMode.HELPER_BOT || state.isAssistantMode) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = if (state.isStockfishActive) Color(0xFF2E7D32).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Text(
+                                        text = if (state.isStockfishActive) "⚡ ${state.activeEngineName}" else "🤖 ${state.activeEngineName}",
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (state.isStockfishActive) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                         Text(
-                            text = "Thinking...",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.SemiBold
+                            text = state.puzzleMessage ?: state.statusDescription,
+                            style = if (isCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (state.position.isKingInCheck(state.position.activeColor)) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurface
                         )
+                    }
+
+                    if (state.isEngineThinking) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Thinking...",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // Active Chess Board (2D or 3D)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            if (state.is3DView) {
-                ChessBoard3D(
-                    position = state.position,
-                    orientation = state.boardOrientation,
-                    selectedSquare = state.selectedSquare,
-                    legalMoves = state.legalMovesForSelected,
-                    lastMove = state.lastMove,
-                    engineArrowMove = if (state.isAssistantMode) state.engineArrowMove else null,
-                    theme = state.boardTheme,
-                    onSquareClicked = { viewModel.onSquareClicked(it) }
-                )
-            } else {
-                ChessBoard2D(
-                    position = state.position,
-                    orientation = state.boardOrientation,
-                    selectedSquare = state.selectedSquare,
-                    legalMoves = state.legalMovesForSelected,
-                    lastMove = state.lastMove,
-                    engineArrowMove = if (state.isAssistantMode) state.engineArrowMove else null,
-                    theme = state.boardTheme,
-                    onSquareClicked = { viewModel.onSquareClicked(it) }
-                )
+            // Only show recommendation arrow for the authorized player/helper bot turn
+            val shouldShowArrow = when {
+                state.gameMode == GameMode.HELPER_BOT -> state.position.activeColor == state.helperBotColor
+                state.gameMode == GameMode.PLAYER_VS_AI -> state.position.activeColor == state.playerColor && state.isAssistantMode
+                state.gameMode == GameMode.ANALYSIS -> true
+                state.isAssistantMode -> true
+                else -> false
             }
-        }
+            val activeArrow = if (shouldShowArrow) state.engineArrowMove else null
 
-        // Move History Strip
-        MoveHistoryView(moveHistory = state.moveHistory)
-
-        // Primary Game Control Actions
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilledTonalIconButton(
-                onClick = { viewModel.undoMove() },
-                enabled = state.moveHistory.isNotEmpty() && !state.isEngineThinking,
-                modifier = Modifier.testTag("btn_undo")
+            // Active Chess Board (2D or 3D) with perfect responsive constraint
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 500.dp)
+                    .clip(RoundedCornerShape(if (isCompact) 10.dp else 16.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(if (isCompact) 2.dp else 4.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Undo, contentDescription = "Undo Move")
+                if (state.is3DView) {
+                    ChessBoard3D(
+                        position = state.position,
+                        orientation = state.boardOrientation,
+                        selectedSquare = state.selectedSquare,
+                        legalMoves = state.legalMovesForSelected,
+                        lastMove = state.lastMove,
+                        engineArrowMove = activeArrow,
+                        theme = state.boardTheme,
+                        onSquareClicked = { viewModel.onSquareClicked(it) }
+                    )
+                } else {
+                    ChessBoard2D(
+                        position = state.position,
+                        orientation = state.boardOrientation,
+                        selectedSquare = state.selectedSquare,
+                        legalMoves = state.legalMovesForSelected,
+                        lastMove = state.lastMove,
+                        engineArrowMove = activeArrow,
+                        theme = state.boardTheme,
+                        onSquareClicked = { viewModel.onSquareClicked(it) }
+                    )
+                }
             }
 
-            FilledTonalIconButton(
-                onClick = { viewModel.redoMove() },
-                enabled = state.redoStack.isNotEmpty() && !state.isEngineThinking,
-                modifier = Modifier.testTag("btn_redo")
-            ) {
-                Icon(Icons.Default.Redo, contentDescription = "Redo Move")
+            // Move History Strip
+            Box(modifier = Modifier.widthIn(max = 500.dp)) {
+                MoveHistoryView(moveHistory = state.moveHistory)
             }
 
-            FilledTonalIconButton(
-                onClick = { viewModel.flipBoard() },
-                modifier = Modifier.testTag("btn_flip")
+            // Primary Game Control Actions
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 500.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.SwapVert, contentDescription = "Flip Board")
+                FilledTonalIconButton(
+                    onClick = { viewModel.undoMove() },
+                    enabled = state.moveHistory.isNotEmpty() && !state.isEngineThinking,
+                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_undo")
+                ) {
+                    Icon(Icons.Default.Undo, contentDescription = "Undo Move", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
+                }
+
+                FilledTonalIconButton(
+                    onClick = { viewModel.redoMove() },
+                    enabled = state.redoStack.isNotEmpty() && !state.isEngineThinking,
+                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_redo")
+                ) {
+                    Icon(Icons.Default.Redo, contentDescription = "Redo Move", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
+                }
+
+                FilledTonalIconButton(
+                    onClick = { viewModel.flipBoard() },
+                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_flip")
+                ) {
+                    Icon(Icons.Default.SwapVert, contentDescription = "Flip Board", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
+                }
+
+                FilledTonalIconToggleButton(
+                    checked = state.is3DView,
+                    onCheckedChange = { viewModel.toggle3DView() },
+                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_3d_toggle")
+                ) {
+                    Icon(Icons.Default.ViewInAr, contentDescription = "3D View Toggle", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
+                }
+
+                FilledTonalIconToggleButton(
+                    checked = state.isAssistantMode,
+                    onCheckedChange = { viewModel.toggleAssistant() },
+                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_assistant_toggle")
+                ) {
+                    Icon(Icons.Default.Psychology, contentDescription = "Assistant Toggle", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
+                }
+
+                FilledTonalIconButton(
+                    onClick = { showNewGameDialog = true },
+                    modifier = Modifier.size(if (isCompact) 40.dp else 48.dp).testTag("btn_new_game")
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "New Game", modifier = Modifier.size(if (isCompact) 18.dp else 22.dp))
+                }
             }
 
-            FilledTonalIconToggleButton(
-                checked = state.is3DView,
-                onCheckedChange = { viewModel.toggle3DView() },
-                modifier = Modifier.testTag("btn_3d_toggle")
+            // Bottom Action Buttons: PGN Export and Mode Switcher
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 500.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.ViewInAr, contentDescription = "3D View Toggle")
-            }
+                OutlinedButton(
+                    onClick = {
+                        pgnExportText = PgnUtils.exportToPgn(state)
+                        showPgnDialog = true
+                    },
+                    modifier = Modifier.weight(1f).testTag("btn_export_pgn"),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = if (isCompact) 6.dp else 10.dp)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Export PGN", style = MaterialTheme.typography.labelMedium)
+                }
 
-            FilledTonalIconToggleButton(
-                checked = state.isAssistantMode,
-                onCheckedChange = { viewModel.toggleAssistant() },
-                modifier = Modifier.testTag("btn_assistant_toggle")
-            ) {
-                Icon(Icons.Default.Psychology, contentDescription = "Assistant Toggle")
-            }
-
-            FilledTonalIconButton(
-                onClick = { showNewGameDialog = true },
-                modifier = Modifier.testTag("btn_new_game")
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = "New Game")
-            }
-        }
-
-        // Bottom Action Buttons: PGN Export and Mode Switcher
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = {
-                    pgnExportText = PgnUtils.exportToPgn(state)
-                    showPgnDialog = true
-                },
-                modifier = Modifier.weight(1f).testTag("btn_export_pgn")
-            ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Export PGN")
-            }
-
-            Button(
-                onClick = { showNewGameDialog = true },
-                modifier = Modifier.weight(1f).testTag("btn_switch_mode")
-            ) {
-                Icon(Icons.Default.SportsEsports, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Game Mode")
+                Button(
+                    onClick = { showNewGameDialog = true },
+                    modifier = Modifier.weight(1f).testTag("btn_switch_mode"),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = if (isCompact) 6.dp else 10.dp)
+                ) {
+                    Icon(Icons.Default.SportsEsports, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Game Mode", style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
     }
