@@ -9,7 +9,6 @@ import android.os.Build
 import android.provider.OpenableColumns
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.*
@@ -136,8 +135,7 @@ class OexEngineManager(private val context: Context) {
 
     /**
      * Imports a custom chess engine binary or APK chosen by the user from Downloads.
-     * Verifies the engine with a UCI handshake.
-     * Returns Result.success(info) on success or Result.failure with error message.
+     * Verifies the engine with a strict UCI handshake.
      */
     suspend fun importCustomEngineFromUri(uri: Uri): Result<OexEngineInfo> = withContext(Dispatchers.IO) {
         try {
@@ -236,8 +234,8 @@ class OexEngineManager(private val context: Context) {
         try {
             val process = ProcessBuilder(execPath).redirectErrorStream(true).start()
             proc = process
-            val writer = BufferedWriter(OutputStreamWriter(process.outputStream))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val writer = BufferedWriter(OutputStreamWriter(process.outputStream, Charsets.UTF_8))
+            val reader = BufferedReader(InputStreamReader(process.inputStream, Charsets.UTF_8))
 
             writer.write("uci\n")
             writer.flush()
@@ -246,7 +244,7 @@ class OexEngineManager(private val context: Context) {
             var responded = false
             val startTime = System.currentTimeMillis()
 
-            while (System.currentTimeMillis() - startTime < 2500) {
+            while (System.currentTimeMillis() - startTime < 3000) {
                 if (reader.ready()) {
                     val line = reader.readLine() ?: break
                     if (line.startsWith("id name ")) {
@@ -258,16 +256,18 @@ class OexEngineManager(private val context: Context) {
                         break
                     }
                 } else {
-                    Thread.sleep(50)
+                    Thread.sleep(30)
                 }
             }
 
-            writer.write("quit\n")
-            writer.flush()
-            writer.close()
-            reader.close()
-            process.destroy()
+            try {
+                writer.write("quit\n")
+                writer.flush()
+                writer.close()
+                reader.close()
+            } catch (_: Exception) {}
 
+            process.destroy()
             return UciVerification(isValid = responded, engineName = engineName)
         } catch (e: Exception) {
             Log.e("OexEngineManager", "Engine verification failed: ${e.message}")
@@ -332,7 +332,7 @@ class OexEngineManager(private val context: Context) {
     }
 
     /**
-     * Extracts or prepares the native engine binary so it can be executed.
+     * Extracts or prepares the native engine binary with executable permissions.
      */
     private fun prepareEngineExecutable(packageName: String, appInfo: ApplicationInfo): String? {
         try {
@@ -348,12 +348,14 @@ class OexEngineManager(private val context: Context) {
                 if (nativeFiles != null && nativeFiles.isNotEmpty()) {
                     for (f in nativeFiles) {
                         if (f.canExecute() || f.name.endsWith(".so")) {
+                            // On Android, executing directly from public nativeLibraryDir is supported,
+                            // or copy to filesDir with executable flags
                             val targetExec = File(enginesDir, f.name)
                             if (!targetExec.exists() || targetExec.length() != f.length()) {
                                 f.copyTo(targetExec, overwrite = true)
                                 setExecutablePermission(targetExec)
                             }
-                            return targetExec.absolutePath
+                            return if (targetExec.canExecute()) targetExec.absolutePath else f.absolutePath
                         }
                     }
                 }
@@ -402,29 +404,114 @@ class OexEngineManager(private val context: Context) {
         try {
             file.setExecutable(true, false)
             file.setReadable(true, false)
-            Runtime.getRuntime().exec("chmod 755 ${file.absolutePath}").waitFor()
+            Runtime.getRuntime().exec(arrayOf("chmod", "755", file.absolutePath)).waitFor()
         } catch (_: Exception) {}
     }
 
+    /**
+     * Starts the UCI engine process and performs the standard UCI handshake:
+     * 1. Send: uci\n -> Drain lines until 'uciok'
+     * 2. Send: isready\n -> Drain lines until 'readyok'
+     * 3. Send: ucinewgame\n
+     */
     suspend fun startEngine(engine: OexEngineInfo): Boolean = withContext(Dispatchers.IO) {
         stopEngine()
         val execPath = engine.executablePath ?: return@withContext false
 
         try {
-            val process = ProcessBuilder(execPath).redirectErrorStream(true).start()
+            val file = File(execPath)
+            if (file.exists()) {
+                setExecutablePermission(file)
+            }
+
+            val pb = ProcessBuilder(execPath)
+            if (file.parentFile != null && file.parentFile.exists()) {
+                pb.directory(file.parentFile)
+            }
+            pb.redirectErrorStream(true)
+            val process = pb.start()
             activeProcess = process
-            processWriter = BufferedWriter(OutputStreamWriter(process.outputStream))
-            processReader = BufferedReader(InputStreamReader(process.inputStream))
+            val writer = BufferedWriter(OutputStreamWriter(process.outputStream, Charsets.UTF_8))
+            val reader = BufferedReader(InputStreamReader(process.inputStream, Charsets.UTF_8))
+            processWriter = writer
+            processReader = reader
             activeEngineInfo = engine
 
-            // Initial handshake
-            sendRawCommand("uci")
-            delay(100)
-            sendRawCommand("isready")
+            // 1. Send "uci" and wait for "uciok"
+            writer.write("uci\n")
+            writer.flush()
+
+            var uciOkReceived = false
+            val startUciTime = System.currentTimeMillis()
+            while (System.currentTimeMillis() - startUciTime < 4000) {
+                if (reader.ready()) {
+                    val line = reader.readLine() ?: break
+                    Log.d("UCI_INIT", line)
+                    if (line.trim() == "uciok" || line.contains("uciok")) {
+                        uciOkReceived = true
+                        break
+                    }
+                } else {
+                    Thread.sleep(25)
+                }
+            }
+
+            // 2. Send "isready" and wait for "readyok"
+            writer.write("isready\n")
+            writer.flush()
+
+            var readyOkReceived = false
+            val startReadyTime = System.currentTimeMillis()
+            while (System.currentTimeMillis() - startReadyTime < 4000) {
+                if (reader.ready()) {
+                    val line = reader.readLine() ?: break
+                    Log.d("UCI_READY", line)
+                    if (line.trim() == "readyok" || line.contains("readyok")) {
+                        readyOkReceived = true
+                        break
+                    }
+                } else {
+                    Thread.sleep(25)
+                }
+            }
+
+            // 3. Send "ucinewgame"
+            writer.write("ucinewgame\n")
+            writer.write("isready\n")
+            writer.flush()
+
+            val startNewGameTime = System.currentTimeMillis()
+            while (System.currentTimeMillis() - startNewGameTime < 3000) {
+                if (reader.ready()) {
+                    val line = reader.readLine() ?: break
+                    if (line.trim() == "readyok" || line.contains("readyok")) {
+                        break
+                    }
+                } else {
+                    Thread.sleep(25)
+                }
+            }
+
+            Log.i("OexEngineManager", "Engine ${engine.name} initialized successfully (uciok=$uciOkReceived, readyok=$readyOkReceived)")
             true
         } catch (e: Exception) {
             Log.e("OexEngineManager", "Failed to launch process for ${engine.name}: ${e.message}")
+            stopEngine()
             false
+        }
+    }
+
+    /**
+     * Resets the active engine state for a new game.
+     */
+    fun sendNewGame() {
+        try {
+            val writer = processWriter ?: return
+            writer.write("ucinewgame\n")
+            writer.write("isready\n")
+            writer.flush()
+        } catch (e: Exception) {
+            Log.e("OexEngineManager", "Error sending ucinewgame: ${e.message}")
         }
     }
 
@@ -432,60 +519,155 @@ class OexEngineManager(private val context: Context) {
         try {
             val writer = processWriter ?: return
             writer.write(cmd)
-            writer.newLine()
+            writer.write("\n")
             writer.flush()
         } catch (e: Exception) {
-            Log.e("OexEngineManager", "Error sending UCI: ${e.message}")
+            Log.e("OexEngineManager", "Error sending UCI command ($cmd): ${e.message}")
         }
     }
 
     /**
      * Queries the external engine (Stockfish 18 / UCI) for the best move in a position.
+     * Uses strict Universal Chess Interface stdin/stdout I/O protocol:
+     * - Drains buffer
+     * - Sends 'isready' -> awaits 'readyok'
+     * - Sends 'position startpos moves [moves]' or 'position fen [fen]'
+     * - Sends 'go movetime [ms] depth [depth]'
+     * - Parses real-time 'info' lines (score cp, score mate, depth, pv)
+     * - Parses 'bestmove [uci]' and returns result
      */
     suspend fun findBestMove(
         fen: String,
-        depth: Int = 10,
-        moveTimeMs: Int = 1500,
-        onProgress: (scoreCp: Int, mateIn: Int?) -> Unit = { _, _ -> }
+        movesUci: List<String> = emptyList(),
+        depth: Int = 12,
+        moveTimeMs: Int = 1200,
+        onProgress: (scoreCp: Int, mateIn: Int?, depth: Int, pv: List<String>) -> Unit = { _, _, _, _ -> }
     ): EngineEvaluationResult? = withContext(Dispatchers.IO) {
-        val process = activeProcess ?: return@withContext null
-        val reader = processReader ?: return@withContext null
+        val process = activeProcess
+        val writer = processWriter
+        val reader = processReader
+
+        if (process == null || writer == null || reader == null) {
+            return@withContext null
+        }
 
         try {
-            sendRawCommand("position fen $fen")
-            sendRawCommand("go depth $depth movetime $moveTimeMs")
+            // 1. Drain any residual output lines from previous operations
+            while (reader.ready()) {
+                reader.readLine()
+            }
+
+            // 2. Synchronize with isready -> readyok
+            writer.write("isready\n")
+            writer.flush()
+            val syncStart = System.currentTimeMillis()
+            while (System.currentTimeMillis() - syncStart < 2000) {
+                if (reader.ready()) {
+                    val line = reader.readLine() ?: break
+                    if (line.trim() == "readyok" || line.contains("readyok")) {
+                        break
+                    }
+                } else {
+                    Thread.sleep(15)
+                }
+            }
+
+            // 3. Set position
+            if (movesUci.isNotEmpty()) {
+                val movesString = movesUci.joinToString(" ")
+                writer.write("position startpos moves $movesString\n")
+            } else {
+                writer.write("position fen $fen\n")
+            }
+
+            // 4. Send go command
+            writer.write("go movetime $moveTimeMs depth $depth\n")
+            writer.flush()
 
             var bestMove: String? = null
             var currentScoreCp = 0
             var currentMateIn: Int? = null
             var currentDepth = 0
+            var currentPv = emptyList<String>()
 
-            withTimeoutOrNull(moveTimeMs.toLong() + 3000L) {
-                while (true) {
+            val searchTimeoutMs = moveTimeMs.toLong() + 3500L
+            val searchStartTime = System.currentTimeMillis()
+
+            while (System.currentTimeMillis() - searchStartTime < searchTimeoutMs) {
+                if (reader.ready()) {
                     val line = reader.readLine() ?: break
-                    if (line.startsWith("bestmove")) {
-                        val parts = line.split(" ")
+                    val trimmed = line.trim()
+                    Log.d("UCI_SEARCH", trimmed)
+
+                    if (trimmed.startsWith("bestmove")) {
+                        val parts = trimmed.split(Regex("\\s+"))
                         if (parts.size >= 2) {
-                            bestMove = parts[1]
+                            val candidate = parts[1].trim()
+                            if (candidate != "(none)" && candidate.isNotEmpty()) {
+                                bestMove = candidate
+                            }
                         }
                         break
-                    } else if (line.startsWith("info")) {
-                        if (line.contains("score cp")) {
-                            val idx = line.indexOf("score cp")
-                            val scoreStr = line.substring(idx + 9).trim().split(" ").firstOrNull()
+                    } else if (trimmed.startsWith("info")) {
+                        // Parse depth
+                        if (trimmed.contains("depth ")) {
+                            val dIdx = trimmed.indexOf("depth ")
+                            val dStr = trimmed.substring(dIdx + 6).trim().split(" ").firstOrNull()
+                            dStr?.toIntOrNull()?.let { currentDepth = it }
+                        }
+
+                        // Parse score
+                        if (trimmed.contains("score cp ")) {
+                            val idx = trimmed.indexOf("score cp ")
+                            val scoreStr = trimmed.substring(idx + 9).trim().split(" ").firstOrNull()
                             scoreStr?.toIntOrNull()?.let {
                                 currentScoreCp = it
                                 currentMateIn = null
-                                onProgress(it, null)
                             }
-                        } else if (line.contains("score mate")) {
-                            val idx = line.indexOf("score mate")
-                            val mateStr = line.substring(idx + 11).trim().split(" ").firstOrNull()
+                        } else if (trimmed.contains("score mate ")) {
+                            val idx = trimmed.indexOf("score mate ")
+                            val mateStr = trimmed.substring(idx + 11).trim().split(" ").firstOrNull()
                             mateStr?.toIntOrNull()?.let {
                                 currentMateIn = it
-                                onProgress(if (it > 0) 10000 else -10000, it)
+                                currentScoreCp = if (it > 0) 10000 else -10000
                             }
                         }
+
+                        // Parse PV (Principal Variation) line
+                        if (trimmed.contains(" pv ")) {
+                            val pvIdx = trimmed.indexOf(" pv ")
+                            val pvSub = trimmed.substring(pvIdx + 4).trim()
+                            currentPv = pvSub.split(Regex("\\s+")).filter { it.length in 4..5 }
+                        }
+
+                        onProgress(currentScoreCp, currentMateIn, currentDepth, currentPv)
+                    }
+                } else {
+                    Thread.sleep(15)
+                }
+            }
+
+            // If bestmove was not received in time, send "stop" command to force engine output
+            if (bestMove == null) {
+                writer.write("stop\n")
+                writer.flush()
+                val stopStart = System.currentTimeMillis()
+                while (System.currentTimeMillis() - stopStart < 1500) {
+                    if (reader.ready()) {
+                        val line = reader.readLine() ?: break
+                        val trimmed = line.trim()
+                        if (trimmed.startsWith("bestmove")) {
+                            val parts = trimmed.split(Regex("\\s+"))
+                            if (parts.size >= 2) {
+                                val candidate = parts[1].trim()
+                                if (candidate != "(none)" && candidate.isNotEmpty()) {
+                                    bestMove = candidate
+                                }
+                            }
+                            break
+                        }
+                    } else {
+                        Thread.sleep(15)
                     }
                 }
             }
@@ -494,7 +676,8 @@ class OexEngineManager(private val context: Context) {
                 bestMoveUci = bestMove,
                 scoreCp = currentScoreCp,
                 mateIn = currentMateIn,
-                depth = currentDepth
+                depth = currentDepth,
+                pvLine = currentPv
             )
         } catch (e: Exception) {
             Log.e("OexEngineManager", "Error during UCI search: ${e.message}")
@@ -504,8 +687,11 @@ class OexEngineManager(private val context: Context) {
 
     fun stopEngine() {
         try {
-            sendRawCommand("quit")
-            processWriter?.close()
+            processWriter?.let {
+                it.write("quit\n")
+                it.flush()
+                it.close()
+            }
             processReader?.close()
             activeProcess?.destroy()
         } catch (_: Exception) {} finally {

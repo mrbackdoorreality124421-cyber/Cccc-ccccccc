@@ -363,14 +363,16 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         aiJob = viewModelScope.launch {
             _uiState.update { it.copy(isEngineThinking = true) }
             val state = _uiState.value
+            val movesUci = state.moveHistory.map { it.uci }
 
             if (state.isExternalEngineRunning && oexEngineManager.isRunning) {
                 // Use Stockfish 18 / External UCI Engine
                 val oexResult = oexEngineManager.findBestMove(
                     fen = currentPos.toFen(),
+                    movesUci = movesUci,
                     depth = state.aiSearchDepth,
                     moveTimeMs = state.aiMoveTimeMs
-                ) { scoreCp, mateIn ->
+                ) { scoreCp, mateIn, _, _ ->
                     _uiState.update {
                         it.copy(
                             engineEvaluationCp = scoreCp,
@@ -395,9 +397,10 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // Fallback or Primary: Built-in Grandmaster Alpha-Beta engine
+            // Fallback or Primary: Built-in Grandmaster Alpha-Beta engine with Opening Book
             val eval = alphaBetaEngine.findBestMove(
                 position = currentPos,
+                moveHistoryUci = movesUci,
                 maxDepth = state.aiSearchDepth,
                 timeLimitMs = state.aiMoveTimeMs
             ) { progress ->
@@ -428,6 +431,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         aiJob = viewModelScope.launch {
             _uiState.update { it.copy(isEngineThinking = true) }
             val state = _uiState.value
+            val movesUci = state.moveHistory.map { it.uci }
 
             var calculatedMove: ChessMove? = null
             var calculatedScoreCp = 0
@@ -437,9 +441,10 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
                 // Calculate with external engine (Stockfish 18)
                 val oexResult = oexEngineManager.findBestMove(
                     fen = currentPos.toFen(),
+                    movesUci = movesUci,
                     depth = state.aiSearchDepth,
                     moveTimeMs = state.aiMoveTimeMs
-                ) { scoreCp, mateIn ->
+                ) { scoreCp, mateIn, _, _ ->
                     _uiState.update {
                         it.copy(
                             engineEvaluationCp = scoreCp,
@@ -453,9 +458,10 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (calculatedMove == null) {
-                // Fallback to built-in Alpha-Beta
+                // Fallback to built-in Alpha-Beta with Opening Book
                 val eval = alphaBetaEngine.findBestMove(
                     position = currentPos,
+                    moveHistoryUci = movesUci,
                     maxDepth = state.aiSearchDepth,
                     timeLimitMs = state.aiMoveTimeMs
                 )
@@ -502,6 +508,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val pos = state.position
+        val movesUci = state.moveHistory.map { it.uci }
         viewModelScope.launch(Dispatchers.Default) {
             val currentState = _uiState.value
             if (currentState.gameMode == GameMode.HELPER_BOT && currentState.position.activeColor != currentState.helperBotColor) {
@@ -516,6 +523,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
             if (currentState.isExternalEngineRunning && oexEngineManager.isRunning) {
                 val oexResult = oexEngineManager.findBestMove(
                     fen = pos.toFen(),
+                    movesUci = movesUci,
                     depth = 10,
                     moveTimeMs = 400
                 )
@@ -534,6 +542,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
 
             val eval = alphaBetaEngine.findBestMove(
                 position = pos,
+                moveHistoryUci = movesUci,
                 maxDepth = 5,
                 timeLimitMs = 400
             )
@@ -608,6 +617,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         helperAutoPlay: Boolean = true
     ) {
         aiJob?.cancel()
+        oexEngineManager.sendNewGame()
         gameStartTime = System.currentTimeMillis()
         val initPos = ChessPosition.initial()
 
