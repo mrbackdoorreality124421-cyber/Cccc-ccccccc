@@ -113,34 +113,16 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startPlayerVsBot(color: PieceColor = PieceColor.WHITE) {
-        resetGame()
-        _uiState.update {
-            it.copy(
-                gameMode = GameMode.PLAYER_VS_AI,
-                playerColor = color,
-                boardOrientation = color
-            )
-        }
-        if (color == PieceColor.BLACK) {
-            triggerAiMove(_uiState.value.position)
-        }
+        resetGame(mode = GameMode.PLAYER_VS_AI, playerColor = color)
     }
 
     fun startHelperBot(botColor: PieceColor = PieceColor.WHITE, autoPlay: Boolean = true) {
-        resetGame()
-        _uiState.update {
-            it.copy(
-                gameMode = GameMode.HELPER_BOT,
-                playerColor = botColor,
-                helperBotColor = botColor,
-                helperBotAutoPlay = autoPlay,
-                boardOrientation = botColor,
-                isAssistantMode = true
-            )
-        }
-        if (botColor == PieceColor.WHITE) {
-            triggerHelperBotMove(_uiState.value.position)
-        }
+        resetGame(
+            mode = GameMode.HELPER_BOT,
+            playerColor = botColor,
+            helperColor = botColor,
+            helperAutoPlay = autoPlay
+        )
     }
 
     fun toggleHelperAutoPlay() {
@@ -619,10 +601,19 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         executeMove(move)
     }
 
-    fun resetGame(mode: GameMode = _uiState.value.gameMode, playerColor: PieceColor = PieceColor.WHITE) {
+    fun resetGame(
+        mode: GameMode = _uiState.value.gameMode,
+        playerColor: PieceColor = PieceColor.WHITE,
+        helperColor: PieceColor = playerColor,
+        helperAutoPlay: Boolean = true
+    ) {
         aiJob?.cancel()
         gameStartTime = System.currentTimeMillis()
         val initPos = ChessPosition.initial()
+
+        val isHelper = mode == GameMode.HELPER_BOT
+        val actualHelperColor = if (isHelper) helperColor else _uiState.value.helperBotColor
+        val actualHelperAutoPlay = if (isHelper) helperAutoPlay else _uiState.value.helperBotAutoPlay
 
         _uiState.update {
             it.copy(
@@ -640,7 +631,10 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
                 engineMateIn = null,
                 gameMode = mode,
                 playerColor = playerColor,
+                helperBotColor = actualHelperColor,
+                helperBotAutoPlay = actualHelperAutoPlay,
                 boardOrientation = playerColor,
+                isAssistantMode = if (isHelper) true else it.isAssistantMode,
                 promotionPending = null,
                 activePuzzle = null,
                 puzzleMessage = null
@@ -649,6 +643,8 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
 
         if (mode == GameMode.PLAYER_VS_AI && playerColor == PieceColor.BLACK) {
             triggerAiMove(initPos)
+        } else if (mode == GameMode.HELPER_BOT && actualHelperColor == PieceColor.WHITE) {
+            triggerHelperBotMove(initPos)
         } else {
             updateAssistantEvaluation()
         }

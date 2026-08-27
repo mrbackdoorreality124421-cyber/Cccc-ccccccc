@@ -303,7 +303,12 @@ fun PlayScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.resetGame(mode = selectedMode, playerColor = selectedColor)
+                        viewModel.resetGame(
+                            mode = selectedMode,
+                            playerColor = selectedColor,
+                            helperColor = selectedColor,
+                            helperAutoPlay = true
+                        )
                         showNewGameDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BrandGreen, contentColor = Color.Black)

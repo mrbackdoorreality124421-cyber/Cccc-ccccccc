@@ -63,7 +63,7 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets,
         topBar = {
             if (currentScreen != ScreenState.ENGINE_DISCOVERY && currentScreen != ScreenState.PLAY_BOARD) {
                 TopAppBar(
