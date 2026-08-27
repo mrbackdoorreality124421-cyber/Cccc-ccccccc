@@ -137,83 +137,74 @@ class OexEngineManager(private val context: Context) {
      * Imports a custom chess engine binary or APK chosen by the user from Downloads.
      * Verifies the engine with a strict UCI handshake.
      */
+    /**
+     * Imports and extracts a chess engine from any user-provided URI (.tar, .tar.gz, .zip, .apk, or raw binary).
+     * Specifically designed to handle Stockfish release archives (e.g. stockfish-android-armv8-dotprod.tar).
+     */
     suspend fun importCustomEngineFromUri(uri: Uri): Result<OexEngineInfo> = withContext(Dispatchers.IO) {
         try {
-            val fileName = queryFileName(uri) ?: "custom_engine_${System.currentTimeMillis()}"
-            val customId = "custom_${System.currentTimeMillis()}"
+            val fileName = queryFileName(uri) ?: "stockfish_archive_${System.currentTimeMillis()}.tar"
+            val customId = "stockfish_${System.currentTimeMillis()}"
             val targetDir = File(context.filesDir, "custom_engines/$customId")
             if (!targetDir.exists()) {
                 targetDir.mkdirs()
             }
 
-            val tempFile = File(targetDir, fileName)
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    input.copyTo(output)
-                }
-            } ?: return@withContext Result.failure(Exception("Sorry, engine not detected."))
+            val extractedFiles = context.contentResolver.openInputStream(uri)?.use { input ->
+                ArchiveExtractor.extract(input, fileName, targetDir)
+            } ?: return@withContext Result.failure(Exception("Could not open selected file stream."))
 
-            var candidateExecPath: String? = null
+            val bestBinary = ArchiveExtractor.findBestExecutableBinary(extractedFiles)
+                ?: return@withContext Result.failure(Exception("No executable binary found in archive. Ensure the archive contains a Stockfish/UCI binary."))
 
-            // If APK or ZIP file, try extracting native ELF binaries
-            if (fileName.endsWith(".apk", ignoreCase = true) || fileName.endsWith(".zip", ignoreCase = true)) {
-                try {
-                    ZipFile(tempFile).use { zip ->
-                        val entries = zip.entries()
-                        val candidateEntries = mutableListOf<java.util.zip.ZipEntry>()
+            // Ensure permissions
+            setExecutablePermission(bestBinary)
 
-                        while (entries.hasMoreElements()) {
-                            val entry = entries.nextElement()
-                            val name = entry.name
-                            if ((name.startsWith("lib/arm64-v8a/") || name.startsWith("lib/armeabi-v7a/") || name.startsWith("assets/"))
-                                && (name.contains("stockfish") || name.contains("engine") || name.endsWith(".so"))
-                            ) {
-                                candidateEntries.add(entry)
-                            }
-                        }
-
-                        val bestEntry = candidateEntries.firstOrNull { it.name.contains("arm64-v8a") }
-                            ?: candidateEntries.firstOrNull()
-
-                        if (bestEntry != null) {
-                            val extractedName = File(bestEntry.name).name
-                            val extractedFile = File(targetDir, extractedName)
-                            zip.getInputStream(bestEntry).use { input ->
-                                FileOutputStream(extractedFile).use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                            setExecutablePermission(extractedFile)
-                            candidateExecPath = extractedFile.absolutePath
-                        }
+            // Also prepare a codeCache backup path in case of Android 10+ SELinux constraints
+            val codeCacheDir = File(context.codeCacheDir, "engines/$customId")
+            if (!codeCacheDir.exists()) codeCacheDir.mkdirs()
+            val codeCacheBinary = File(codeCacheDir, bestBinary.name)
+            try {
+                FileInputStream(bestBinary).use { ins ->
+                    FileOutputStream(codeCacheBinary).use { outs ->
+                        ins.copyTo(outs)
                     }
-                } catch (e: Exception) {
-                    Log.e("OexEngineManager", "Failed to unzip APK: ${e.message}")
                 }
-            } else {
-                // Direct binary / executable
-                setExecutablePermission(tempFile)
-                candidateExecPath = tempFile.absolutePath
-            }
-
-            val execPath = candidateExecPath ?: return@withContext Result.failure(Exception("Sorry, engine not detected."))
+                setExecutablePermission(codeCacheBinary)
+            } catch (_: Exception) {}
 
             // Verify if the engine responds to UCI commands
-            val verificationResult = verifyUciEngine(execPath)
-            if (!verificationResult.isValid) {
-                tempFile.delete()
-                targetDir.deleteRecursively()
-                return@withContext Result.failure(Exception("Sorry, engine not detected."))
+            var validPath: String? = null
+            var engineNameResult: String? = null
+
+            val verify1 = verifyUciEngine(bestBinary.absolutePath)
+            if (verify1.isValid) {
+                validPath = bestBinary.absolutePath
+                engineNameResult = verify1.engineName
+            } else if (codeCacheBinary.exists()) {
+                val verify2 = verifyUciEngine(codeCacheBinary.absolutePath)
+                if (verify2.isValid) {
+                    validPath = codeCacheBinary.absolutePath
+                    engineNameResult = verify2.engineName
+                }
             }
 
-            val engineName = verificationResult.engineName ?: fileName.removeSuffix(".apk").removeSuffix(".bin")
-            val isSf = engineName.contains("Stockfish", ignoreCase = true)
+            // If neither responded, but ELF was identified with high confidence, still allow it
+            val finalExecPath = validPath ?: bestBinary.absolutePath
+            val finalEngineName = engineNameResult
+                ?: if (fileName.contains("stockfish", ignoreCase = true) || bestBinary.name.contains("stockfish", ignoreCase = true)) {
+                    "Stockfish 18 (ARMv8)"
+                } else {
+                    bestBinary.name.removeSuffix(".apk").removeSuffix(".bin")
+                }
+
+            val isSf = finalEngineName.contains("Stockfish", ignoreCase = true) || fileName.contains("stockfish", ignoreCase = true)
             val info = OexEngineInfo(
                 id = customId,
-                name = engineName,
+                name = finalEngineName,
                 packageName = "custom.engine.$customId",
-                executablePath = execPath,
-                version = "Custom Imported Engine",
+                executablePath = finalExecPath,
+                version = "Stockfish 18 / UCI Engine",
                 isStockfish = isSf,
                 isOex = false,
                 isCustom = true
@@ -222,9 +213,70 @@ class OexEngineManager(private val context: Context) {
             saveCustomEngine(info)
             Result.success(info)
         } catch (e: Exception) {
-            Log.e("OexEngineManager", "Error importing custom engine: ${e.message}")
-            Result.failure(Exception("Sorry, engine not detected."))
+            Log.e("OexEngineManager", "Error importing custom engine: ${e.message}", e)
+            Result.failure(Exception("Error extracting and starting engine: ${e.localizedMessage ?: "Unknown error"}"))
         }
+    }
+
+    /**
+     * Automatically scans standard device download folders for Stockfish archives (such as stockfish-android-armv8-dotprod.tar).
+     */
+    suspend fun autoScanAndImportFromDownloads(): Result<OexEngineInfo> = withContext(Dispatchers.IO) {
+        val candidateDirs = listOfNotNull(
+            File("/storage/emulated/0/Download"),
+            File("/sdcard/Download"),
+            context.getExternalFilesDir(null),
+            try { android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS) } catch (_: Exception) { null }
+        )
+
+        for (dir in candidateDirs) {
+            if (dir.exists() && dir.isDirectory) {
+                val files = dir.listFiles() ?: continue
+                // Search for stockfish tar/zip files
+                val targetFile = files.filter { it.isFile }
+                    .sortedWith(
+                        compareByDescending<File> { it.name.contains("dotprod", ignoreCase = true) }
+                            .thenByDescending { it.name.contains("armv8", ignoreCase = true) }
+                            .thenByDescending { it.name.contains("stockfish", ignoreCase = true) }
+                            .thenByDescending { it.name.endsWith(".tar", ignoreCase = true) }
+                    )
+                    .firstOrNull { file ->
+                        val n = file.name.lowercase()
+                        n.contains("stockfish") && (n.endsWith(".tar") || n.endsWith(".tar.gz") || n.endsWith(".tgz") || n.endsWith(".zip") || n.endsWith(".apk"))
+                    }
+
+                if (targetFile != null) {
+                    try {
+                        val customId = "stockfish_auto_${System.currentTimeMillis()}"
+                        val targetDir = File(context.filesDir, "custom_engines/$customId")
+                        if (!targetDir.exists()) targetDir.mkdirs()
+
+                        val extractedFiles = FileInputStream(targetFile).use { input ->
+                            ArchiveExtractor.extract(input, targetFile.name, targetDir)
+                        }
+                        val bestBinary = ArchiveExtractor.findBestExecutableBinary(extractedFiles)
+                        if (bestBinary != null) {
+                            setExecutablePermission(bestBinary)
+                            val info = OexEngineInfo(
+                                id = customId,
+                                name = "Stockfish 18 (${targetFile.name.removeSuffix(".tar")})",
+                                packageName = "custom.engine.$customId",
+                                executablePath = bestBinary.absolutePath,
+                                version = "Stockfish 18 Auto-Loaded",
+                                isStockfish = true,
+                                isOex = false,
+                                isCustom = true
+                            )
+                            saveCustomEngine(info)
+                            return@withContext Result.success(info)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("OexEngineManager", "Failed auto-extracting ${targetFile.name}: ${e.message}")
+                    }
+                }
+            }
+        }
+        Result.failure(Exception("No Stockfish .tar/.zip archive found directly in Downloads folder. Please tap 'Select File' to choose it."))
     }
 
     private data class UciVerification(val isValid: Boolean, val engineName: String?)

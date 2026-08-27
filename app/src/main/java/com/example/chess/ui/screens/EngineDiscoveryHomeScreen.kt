@@ -60,13 +60,12 @@ fun EngineDiscoveryHomeScreen(
             viewModel.importCustomEngine(uri) { success, msg ->
                 isImportingCustom = false
                 if (success) {
-                    // Successfully imported and connected, proceed to main menu
                     val currentSelected = state.selectedOexEngineId?.let { id ->
                         viewModel.discoveredOexEngines.value.find { it.id == id }
                     }
                     onEngineSelected(currentSelected)
                 } else {
-                    errorMessage = "Sorry, engine not detected."
+                    errorMessage = msg
                 }
             }
         }
@@ -411,7 +410,7 @@ fun EngineDiscoveryHomeScreen(
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "CUSTOM ENGINE IMPORT",
+                    text = "STOCKFISH .TAR / ARCHIVE IMPORT",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -422,7 +421,7 @@ fun EngineDiscoveryHomeScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface
                     ),
@@ -431,55 +430,94 @@ fun EngineDiscoveryHomeScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
+                            .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(50.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF2E7D32).copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Icons.Default.FolderOpen,
+                                Icons.Default.Bolt,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "Import Custom Engine (APK / Binary)",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(30.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "Opens your phone's Downloads folder to pick a chess engine APK (Stockfish, Komodo) or compiled UCI executable.",
+                            text = "Stockfish 18 Auto-Setup",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = "Select your downloaded 'stockfish-android-armv8-dotprod.tar'. The app will automatically extract, configure permissions, and run Stockfish without any manual steps!",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
+                        // Primary Button 1: 1-Tap Auto-Scan Downloads
+                        Button(
+                            onClick = {
+                                isImportingCustom = true
+                                errorMessage = null
+                                viewModel.autoDetectStockfishFromDownloads { success, msg ->
+                                    isImportingCustom = false
+                                    if (success) {
+                                        val currentSelected = state.selectedOexEngineId?.let { id ->
+                                            viewModel.discoveredOexEngines.value.find { it.id == id }
+                                        }
+                                        onEngineSelected(currentSelected)
+                                    } else {
+                                        errorMessage = msg
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auto_detect_stockfish_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                            enabled = !isImportingCustom
+                        ) {
+                            if (isImportingCustom) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Extracting & Starting Stockfish...", color = Color.White)
+                            } else {
+                                Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("1-Tap Auto-Load from Downloads", fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Primary Button 2: Open File Picker for .tar
                         OutlinedButton(
                             onClick = {
                                 customEnginePickerLauncher.launch("*/*")
                             },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("import_custom_engine_button"),
                             enabled = !isImportingCustom
                         ) {
-                            if (isImportingCustom) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Verifying Engine...")
-                            } else {
-                                Icon(Icons.Default.Download, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Open Downloads & Select File", fontWeight = FontWeight.SemiBold)
-                            }
+                            Icon(Icons.Default.FolderOpen, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Select stockfish...tar File", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

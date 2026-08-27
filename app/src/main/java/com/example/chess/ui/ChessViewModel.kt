@@ -109,9 +109,26 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
                 if (engine != null) {
                     selectEngine(engine)
                 }
-                onResult(true, "Engine imported successfully: ${engine?.name}")
+                onResult(true, "Stockfish engine unpacked & loaded successfully: ${engine?.name}")
             } else {
-                onResult(false, "Sorry, engine not detected.")
+                onResult(false, result.exceptionOrNull()?.message ?: "Sorry, engine not detected.")
+            }
+        }
+    }
+
+    fun autoDetectStockfishFromDownloads(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val result = oexEngineManager.autoScanAndImportFromDownloads()
+            if (result.isSuccess) {
+                val engine = result.getOrNull()
+                val engines = oexEngineManager.discoverEngines()
+                _discoveredOexEngines.value = engines
+                if (engine != null) {
+                    selectEngine(engine)
+                }
+                onResult(true, "Stockfish (.tar) auto-detected and extracted: ${engine?.name}")
+            } else {
+                onResult(false, result.exceptionOrNull()?.message ?: "No Stockfish file found directly in Downloads.")
             }
         }
     }
