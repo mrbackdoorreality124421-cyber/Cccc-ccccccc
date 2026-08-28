@@ -74,10 +74,10 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
                     },
                     actions = {
                         IconButton(onClick = { currentScreen = ScreenState.CUSTOM_BOARD }, modifier = Modifier.testTag("nav_btn_custom_board")) {
-                            Icon(Icons.Default.Build, contentDescription = "Custom Board")
+                            Icon(imageVector = Icons.Default.Build, contentDescription = "Custom Board")
                         }
                         IconButton(onClick = { currentScreen = ScreenState.ENGINE_DISCOVERY }, modifier = Modifier.testTag("nav_btn_engine_scan")) {
-                            Icon(Icons.Default.Memory, contentDescription = "Engines")
+                            Icon(imageVector = Icons.Default.Memory, contentDescription = "Engines")
                         }
                     }
                 )
@@ -86,11 +86,41 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
         bottomBar = {
             if (currentScreen != ScreenState.ENGINE_DISCOVERY && currentScreen != ScreenState.PLAY_BOARD && currentScreen != ScreenState.CUSTOM_BOARD) {
                 NavigationBar(tonalElevation = 6.dp) {
-                    NavigationBarItem(currentScreen == ScreenState.MAIN_MENU, { currentScreen = ScreenState.MAIN_MENU }, { Icon(Icons.Default.Home, "Main Menu") }, { Text("Menu") }, modifier = Modifier.testTag("nav_tab_menu"))
-                    NavigationBarItem(currentScreen == ScreenState.PLAY_BOARD, { currentScreen = ScreenState.PLAY_BOARD }, { Icon(Icons.Default.SportsEsports, "Board") }, { Text("Board") }, modifier = Modifier.testTag("nav_tab_board"))
-                    NavigationBarItem(currentScreen == ScreenState.PUZZLES, { currentScreen = ScreenState.PUZZLES }, { Icon(Icons.Default.Extension, "Puzzles") }, { Text("Puzzles") }, modifier = Modifier.testTag("nav_tab_puzzles"))
-                    NavigationBarItem(currentScreen == ScreenState.HISTORY, { currentScreen = ScreenState.HISTORY }, { Icon(Icons.Default.History, "History") }, { Text("History") }, modifier = Modifier.testTag("nav_tab_history"))
-                    NavigationBarItem(currentScreen == ScreenState.SETTINGS, { currentScreen = ScreenState.SETTINGS }, { Icon(Icons.Default.Settings, "Settings") }, { Text("Settings") }, modifier = Modifier.testTag("nav_tab_settings"))
+                    NavigationBarItem(
+                        selected = currentScreen == ScreenState.MAIN_MENU,
+                        onClick = { currentScreen = ScreenState.MAIN_MENU },
+                        icon = { Icon(imageVector = Icons.Default.Home, contentDescription = "Main Menu") },
+                        label = { Text("Menu") },
+                        modifier = Modifier.testTag("nav_tab_menu")
+                    )
+                    NavigationBarItem(
+                        selected = currentScreen == ScreenState.PLAY_BOARD,
+                        onClick = { currentScreen = ScreenState.PLAY_BOARD },
+                        icon = { Icon(imageVector = Icons.Default.SportsEsports, contentDescription = "Board") },
+                        label = { Text("Board") },
+                        modifier = Modifier.testTag("nav_tab_board")
+                    )
+                    NavigationBarItem(
+                        selected = currentScreen == ScreenState.PUZZLES,
+                        onClick = { currentScreen = ScreenState.PUZZLES },
+                        icon = { Icon(imageVector = Icons.Default.Extension, contentDescription = "Puzzles") },
+                        label = { Text("Puzzles") },
+                        modifier = Modifier.testTag("nav_tab_puzzles")
+                    )
+                    NavigationBarItem(
+                        selected = currentScreen == ScreenState.HISTORY,
+                        onClick = { currentScreen = ScreenState.HISTORY },
+                        icon = { Icon(imageVector = Icons.Default.History, contentDescription = "History") },
+                        label = { Text("History") },
+                        modifier = Modifier.testTag("nav_tab_history")
+                    )
+                    NavigationBarItem(
+                        selected = currentScreen == ScreenState.SETTINGS,
+                        onClick = { currentScreen = ScreenState.SETTINGS },
+                        icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings") },
+                        modifier = Modifier.testTag("nav_tab_settings")
+                    )
                 }
             }
         }
