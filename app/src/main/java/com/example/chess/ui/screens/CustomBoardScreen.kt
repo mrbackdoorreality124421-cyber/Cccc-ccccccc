@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.*
@@ -15,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.example.chess.model.*
 import com.example.chess.ui.ChessViewModel
@@ -33,6 +36,11 @@ fun CustomBoardScreen(
     var activeColor by remember { mutableStateOf(PieceColor.WHITE) }
     var error by remember { mutableStateOf<String?>(null) }
     var placementMode by remember { mutableStateOf(true) }
+    var copied by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+    val state by viewModel.uiState.collectAsState()
+    val depth = state.aiSearchDepth
+    val fen = position.copy(activeColor = activeColor).toFen()
 
     fun updateSquare(square: Square) {
         val next = position.board.toMutableList()
@@ -41,6 +49,7 @@ fun CustomBoardScreen(
         else ChessPiece(selectedType, selectedColor)
         position = position.copy(board = next)
         error = null
+        copied = false
     }
 
     fun clearBoard() {
@@ -93,13 +102,35 @@ fun CustomBoardScreen(
             }
 
             Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Side to move", Modifier.weight(1f))
-                    FilterChip(selected = activeColor == PieceColor.WHITE, onClick = { activeColor = PieceColor.WHITE }, label = { Text("White") })
-                    Spacer(Modifier.width(6.dp))
-                    FilterChip(selected = activeColor == PieceColor.BLACK, onClick = { activeColor = PieceColor.BLACK }, label = { Text("Black") })
+                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Side to move", Modifier.weight(1f))
+                        FilterChip(selected = activeColor == PieceColor.WHITE, onClick = { activeColor = PieceColor.WHITE }, label = { Text("White") })
+                        Spacer(Modifier.width(6.dp))
+                        FilterChip(selected = activeColor == PieceColor.BLACK, onClick = { activeColor = PieceColor.BLACK }, label = { Text("Black") })
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Engine depth: $depth", style = MaterialTheme.typography.labelMedium)
+                    Slider(
+                        value = depth.toFloat(),
+                        onValueChange = { viewModel.setAiDepth(it.toInt().coerceIn(1, 30)) },
+                        valueRange = 1f..30f,
+                        steps = 28
+                    )
+                    Text("Lower = faster • Higher = deeper analysis", style = MaterialTheme.typography.bodySmall)
                 }
             }
+
+            Surface(shape = RoundedCornerShape(10.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(fen, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 2)
+                    IconButton(onClick = {
+                        clipboard.setText(AnnotatedString(fen))
+                        copied = true
+                    }) { Icon(Icons.Default.ContentCopy, "Copy FEN") }
+                }
+            }
+            if (copied) Text("FEN copied", style = MaterialTheme.typography.labelSmall)
 
             if (error != null) {
                 Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
