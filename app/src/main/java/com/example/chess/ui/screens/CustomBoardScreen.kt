@@ -32,6 +32,7 @@ fun CustomBoardScreen(
     var selectedType by remember { mutableStateOf(PieceType.QUEEN) }
     var activeColor by remember { mutableStateOf(PieceColor.WHITE) }
     var error by remember { mutableStateOf<String?>(null) }
+    var placementMode by remember { mutableStateOf(true) }
 
     fun updateSquare(square: Square) {
         val next = position.board.toMutableList()
@@ -42,59 +43,83 @@ fun CustomBoardScreen(
         error = null
     }
 
-    val editablePosition = position
+    fun clearBoard() {
+        position = position.copy(board = MutableList(64) { null })
+        error = null
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Custom Board Setup") },
+                title = { Text("Custom Board") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } },
-                actions = { IconButton(onClick = { position = ChessPosition.initial(); error = null }) { Icon(Icons.Default.Delete, "Reset") } }
+                actions = {
+                    IconButton(onClick = { clearBoard() }) { Icon(Icons.Default.Delete, "Clear board") }
+                    TextButton(onClick = { position = ChessPosition.initial(); activeColor = PieceColor.WHITE; error = null }) { Text("Reset") }
+                }
             )
         }
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(12.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Tap a square to place the selected piece. Tap it again to remove it.", style = MaterialTheme.typography.bodySmall)
-
-            Box(
-                modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp).aspectRatio(1f)
-                    .clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                SimpleEditorBoard(editablePosition, onSquareClick = ::updateSquare)
+            Surface(shape = RoundedCornerShape(14.dp), tonalElevation = 2.dp) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Position Editor", style = MaterialTheme.typography.titleMedium)
+                        Text("Select a piece, then tap any square", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(if (placementMode) "EDIT" else "READY", style = MaterialTheme.typography.labelMedium)
+                }
             }
 
+            Box(
+                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).aspectRatio(1f)
+                    .clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                SimpleEditorBoard(position, onSquareClick = ::updateSquare)
+            }
+
+            Text("Piece", style = MaterialTheme.typography.labelLarge, modifier = Modifier.fillMaxWidth())
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 item { ColorChip("White", selectedColor == PieceColor.WHITE) { selectedColor = PieceColor.WHITE } }
                 item { ColorChip("Black", selectedColor == PieceColor.BLACK) { selectedColor = PieceColor.BLACK } }
                 PieceType.values().forEach { type ->
-                    item { ColorChip(type.name.lowercase().replaceFirstChar { it.uppercase() }, selectedType == type) { selectedType = type } }
+                    item { ColorChip(pieceName(type), selectedType == type) { selectedType = type } }
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Side to move")
-                FilterChip(selected = activeColor == PieceColor.WHITE, onClick = { activeColor = PieceColor.WHITE }, label = { Text("White") })
-                FilterChip(selected = activeColor == PieceColor.BLACK, onClick = { activeColor = PieceColor.BLACK }, label = { Text("Black") })
+            Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Side to move", Modifier.weight(1f))
+                    FilterChip(selected = activeColor == PieceColor.WHITE, onClick = { activeColor = PieceColor.WHITE }, label = { Text("White") })
+                    Spacer(Modifier.width(6.dp))
+                    FilterChip(selected = activeColor == PieceColor.BLACK, onClick = { activeColor = PieceColor.BLACK }, label = { Text("Black") })
+                }
             }
 
-            if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            if (error != null) {
+                Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Text(error!!, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
+                }
+            }
 
             Button(
                 onClick = {
                     val whiteKings = position.board.count { it?.type == PieceType.KING && it.color == PieceColor.WHITE }
                     val blackKings = position.board.count { it?.type == PieceType.KING && it.color == PieceColor.BLACK }
                     if (whiteKings != 1 || blackKings != 1) {
-                        error = "Position must contain exactly one White King and one Black King."
+                        error = "Exactly one White King and one Black King are required."
                         return@Button
                     }
                     val fenPosition = position.copy(activeColor = activeColor, castlingRights = CastlingRights.NONE, enPassantTarget = null, halfmoveClock = 0, fullmoveNumber = 1)
-                    if (viewModel.loadFen(fenPosition.toFen())) onAnalyze() else error = "Unable to load this position."
+                    if (viewModel.loadFen(fenPosition.toFen())) onAnalyze() else error = "The position could not be loaded into the chess engine."
                 },
-                modifier = Modifier.fillMaxWidth().height(52.dp)
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(Icons.Default.Psychology, null)
                 Spacer(Modifier.width(8.dp))
@@ -104,13 +129,18 @@ fun CustomBoardScreen(
     }
 }
 
+private fun pieceName(type: PieceType): String = when (type) {
+    PieceType.KING -> "King"
+    PieceType.QUEEN -> "Queen"
+    PieceType.ROOK -> "Rook"
+    PieceType.BISHOP -> "Bishop"
+    PieceType.KNIGHT -> "Knight"
+    PieceType.PAWN -> "Pawn"
+}
+
 @Composable
 private fun ColorChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(10.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-    ) { Text(text, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium) }
+    FilterChip(selected = selected, onClick = onClick, label = { Text(text) })
 }
 
 @Composable
@@ -122,9 +152,13 @@ private fun SimpleEditorBoard(position: ChessPosition, onSquareClick: (Square) -
                     val square = Square(file, rank)
                     val piece = position.pieceAt(square)
                     Box(
-                        Modifier.weight(1f).fillMaxHeight().background(if (square.isLightSquare) Color(0xFFE8DCC8) else Color(0xFF7A6046)).clickable { onSquareClick(square) },
+                        Modifier.weight(1f).fillMaxHeight()
+                            .background(if (square.isLightSquare) Color(0xFFE8DCC8) else Color(0xFF7A6046))
+                            .clickable { onSquareClick(square) },
                         contentAlignment = Alignment.Center
-                    ) { Text(piece?.unicodeSymbol ?: "", style = MaterialTheme.typography.headlineLarge) }
+                    ) {
+                        Text(piece?.unicodeSymbol ?: "", style = MaterialTheme.typography.headlineLarge)
+                    }
                 }
             }
         }
