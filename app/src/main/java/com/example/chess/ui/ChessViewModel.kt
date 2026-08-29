@@ -349,44 +349,26 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(position = pos, moveHistory = emptyList(), positionHistory = listOf(pos), redoStack = emptyList(), status = GameStatus.IN_PROGRESS, selectedSquare = null, legalMovesForSelected = emptyList(), lastMove = null, engineArrowMove = null, isEngineThinking = false, gameMode = GameMode.TACTICAL_PUZZLE, boardOrientation = playerColor, playerColor = playerColor, activePuzzle = puzzle, puzzleMoveIndex = 0, puzzleMessage = puzzle.description, isFenGame = false) }
     }
 
-    fun startCustomGame(fenString: String, mode: GameMode, playerColor: PieceColor): Boolean {
-        val pos = ChessPosition.fromFen(fenString) ?: return false
-        aiJob?.cancel()
-        oexEngineManager.sendNewGame()
-        gameStartTime = System.currentTimeMillis()
-        val helperMode = mode == GameMode.HELPER_BOT
-        val helperColor = pos.activeColor
-        _uiState.update {
-            it.copy(
-                position = pos,
-                moveHistory = emptyList(),
-                positionHistory = listOf(pos),
-                redoStack = emptyList(),
-                status = GameStatus.IN_PROGRESS,
-                selectedSquare = null,
-                legalMovesForSelected = emptyList(),
-                lastMove = null,
-                engineArrowMove = null,
-                isEngineThinking = false,
-                engineEvaluationCp = 0,
-                engineMateIn = null,
-                gameMode = mode,
-                playerColor = playerColor,
-                helperBotColor = helperColor,
-                helperBotAutoPlay = false,
-                boardOrientation = playerColor,
-                isAssistantMode = true,
-                isFenGame = true,
-                promotionPending = null,
-                activePuzzle = null,
-                puzzleMessage = null
-            )
+    fun startCustomGame(
+        fenString: String,
+        mode: GameMode,
+        playerColor: PieceColor
+    ): Boolean {
+        val position = ChessPosition.fromFen(fenString) ?: return false
+
+        _gameMode.value = mode
+        _playerColor.value = playerColor
+
+        loadPosition(position)
+
+        if (mode == GameMode.PLAYER_VS_AI) {
+            if (position.activeColor != playerColor) {
+                triggerBotMove()
+            }
+        } else if (mode == GameMode.HELPER_BOT) {
+            triggerHelperSuggestion()
         }
-        when {
-            mode == GameMode.PLAYER_VS_AI && pos.activeColor != playerColor -> triggerAiMove(pos)
-            helperMode -> triggerHelperBotMove(pos)
-            else -> _uiState.update { it.copy(engineArrowMove = null) }
-        }
+
         return true
     }
 
