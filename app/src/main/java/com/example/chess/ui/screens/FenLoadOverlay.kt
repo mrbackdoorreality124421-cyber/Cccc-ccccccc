@@ -15,13 +15,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.chess.model.ChessPosition
 import com.example.chess.model.GameMode
 import com.example.chess.model.PieceColor
 import com.example.chess.ui.ChessViewModel
@@ -63,7 +63,7 @@ fun FenLoadOverlay(
             },
             confirmButton = {
                 Button(onClick = {
-                    if (viewModel.validateFen(fen)) {
+                    if (ChessPosition.fromFen(fen) != null) {
                         showFenDialog = false
                         showModeDialog = true
                     } else {
