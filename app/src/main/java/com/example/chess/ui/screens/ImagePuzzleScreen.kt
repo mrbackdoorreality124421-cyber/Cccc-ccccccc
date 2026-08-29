@@ -24,68 +24,114 @@ fun ImagePuzzleScreen(viewModel: ChessViewModel, onBack: () -> Unit, onOpenCusto
     val context = androidx.compose.ui.platform.LocalContext.current
     val service = remember { GroqVisionService(context) }
     val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
     var apiKey by remember { mutableStateOf(service.savedKey().orEmpty()) }
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
     var detectedFen by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var testBusy by remember { mutableStateOf(false) }
     var showKey by remember { mutableStateOf(false) }
+    var editableFen by remember { mutableStateOf("") }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        selectedUri = uri; detectedFen = null
+        selectedUri = uri
+        detectedFen = null
+        editableFen = ""
         status = if (uri == null) "No image selected." else "Image selected. Ready to detect position."
     }
 
-    fun detect() {
-        val uri = selectedUri ?: run { status = "Select a chess image first."; return }
-        if (apiKey.isBlank()) { status = "Groq API key is missing. Use Manual Piece Placement."; return }
-        busy = true; status = "Reading board with Groq Vision…"
+    fun showStatus(text: String) {
+        status = text
+        scope.launch { snackbar.showSnackbar(text) }
+    }
+
+    fun testConnection() {
+        val key = apiKey.trim()
+        if (key.isBlank()) { showStatus("Enter a Groq API key first."); return }
+        testBusy = true
+        showStatus("Testing Groq connection…")
         scope.launch {
-            service.imageToFen(context, uri, apiKey).onSuccess { fen -> detectedFen = fen; status = "Position detected. Review before analysis." }
-                .onFailure { status = it.message ?: "Vision detection failed." }
+            service.testConnection(key)
+                .onSuccess { showStatus("✅ $it") }
+                .onFailure { showStatus("❌ ${it.message ?: "Groq connection failed."}") }
+            testBusy = false
+        }
+    }
+
+    fun detect() {
+        val uri = selectedUri ?: run { showStatus("Select a chess image first."); return }
+        val key = apiKey.trim()
+        if (key.isBlank()) { showStatus("Groq API key is missing. Use Manual Piece Placement."); return }
+        busy = true
+        showStatus("Reading board with Groq Vision…")
+        scope.launch {
+            service.imageToFen(context, uri, key)
+                .onSuccess { fen -> detectedFen = fen; editableFen = fen; showStatus("✅ Position detected. Review it before analysis.") }
+                .onFailure { showStatus("❌ ${it.message ?: "Vision detection failed."}") }
             busy = false
         }
     }
 
-    Scaffold(modifier.fillMaxSize(), topBar = { TopAppBar(title = { Text("Image Puzzle") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } }) }) { padding ->
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbar) },
+        topBar = { TopAppBar(title = { Text("Image Puzzle") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } }) }
+    ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(10.dp))
-                        Column { Text("Chess Image → FEN", style = MaterialTheme.typography.titleLarge); Text("Groq Vision reads the actual board and pieces.", style = MaterialTheme.typography.bodySmall) }
+                        Column {
+                            Text("Chess Image → FEN", style = MaterialTheme.typography.titleLarge)
+                            Text("Groq Vision reads the actual board and pieces.", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
-                    OutlinedTextField(value = apiKey, onValueChange = { apiKey = it; service.saveKey(it) }, modifier = Modifier.fillMaxWidth(), label = { Text("Groq API Key") }, leadingIcon = { Icon(Icons.Default.Key, null) }, visualTransformation = if (showKey) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(), singleLine = true, trailingIcon = { TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Hide" else "Show") } })
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = {
-                            if (apiKey.isBlank()) status = "Enter your Groq API key first."
-                            else { busy = true; scope.launch { service.testConnection(apiKey).onSuccess { status = it }.onFailure { status = it.message }; busy = false } }
-                        }, enabled = !busy) { Text("Test Connection") }
-                        TextButton(onClick = { apiKey = ""; service.clearKey(); status = "Saved key removed." }) { Text("Clear Key") }
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = { apiKey = it; service.saveKey(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Groq API Key") },
+                        leadingIcon = { Icon(Icons.Default.Key, null) },
+                        visualTransformation = if (showKey) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                        singleLine = true,
+                        trailingIcon = { TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Hide" else "Show") } }
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = ::testConnection, enabled = !busy && !testBusy, modifier = Modifier.weight(1f)) {
+                            if (testBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Default.NetworkCheck, null)
+                            Spacer(Modifier.width(6.dp)); Text("Test Connection")
+                        }
+                        TextButton(onClick = { apiKey = ""; service.clearKey(); showStatus("Saved Groq key removed.") }, enabled = !busy && !testBusy) { Text("Clear Key") }
                     }
                 }
             }
             Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { picker.launch("image/*") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Image, null); Spacer(Modifier.width(8.dp)); Text(if (selectedUri == null) "Select Puzzle Image" else "Choose Another Image") }
-                    Button(onClick = ::detect, enabled = selectedUri != null && apiKey.isNotBlank() && !busy, modifier = Modifier.fillMaxWidth()) { if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(8.dp)); Text("Detect Position") }
+                    Button(onClick = { picker.launch("image/*") }, enabled = !busy && !testBusy, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Image, null); Spacer(Modifier.width(8.dp)); Text(if (selectedUri == null) "Select Puzzle Image" else "Choose Another Image")
+                    }
+                    Button(onClick = ::detect, enabled = selectedUri != null && apiKey.isNotBlank() && !busy && !testBusy, modifier = Modifier.fillMaxWidth()) {
+                        if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Default.AutoAwesome, null)
+                        Spacer(Modifier.width(8.dp)); Text("Detect Position")
+                    }
                 }
             }
-            detectedFen?.let { fen ->
+            detectedFen?.let {
                 Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Detected Position — Review", style = MaterialTheme.typography.titleMedium)
-                        var editableFen by remember(fen) { mutableStateOf(fen) }
+                        Text("Detected Position — Review & Edit", style = MaterialTheme.typography.titleMedium)
                         OutlinedTextField(value = editableFen, onValueChange = { editableFen = it; detectedFen = it }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { if (FenParser.parse(editableFen).isSuccess && viewModel.loadFen(editableFen)) onAnalyze() else status = "FEN is invalid. Edit it or use manual setup." }, modifier = Modifier.weight(1f)) { Text("Confirm & Analyze") }
+                            Button(onClick = { if (FenParser.parse(editableFen).isSuccess && viewModel.loadFen(editableFen)) onAnalyze() else showStatus("❌ FEN is invalid. Edit it or use manual setup.") }, modifier = Modifier.weight(1f)) { Text("Confirm & Analyze") }
                             OutlinedButton(onClick = onOpenCustomBoard, modifier = Modifier.weight(1f)) { Text("Edit Manually") }
                         }
                     }
                 }
             }
-            status?.let { Text(it, color = if (it.contains("failed", true) || it.contains("missing", true) || it.contains("invalid", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+            status?.let { Text(it, color = if (it.contains("❌")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
             OutlinedButton(onClick = onOpenCustomBoard, modifier = Modifier.fillMaxWidth()) { Text("Manual Piece Placement") }
         }
     }
