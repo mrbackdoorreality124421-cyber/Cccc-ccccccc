@@ -66,6 +66,7 @@ fun FenLoadOverlay(
                     if (ChessPosition.fromFen(fen) != null) {
                         showFenDialog = false
                         showModeDialog = true
+                        error = null
                     } else {
                         error = "Invalid FEN. Please check the position and all FEN fields."
                     }
@@ -113,7 +114,7 @@ fun FenLoadOverlay(
                             )
                         }
                     } else {
-                        Text("Helper mode keeps the loaded side-to-move and gives you recommendations without automatically playing the move.")
+                        Text("Bot Helper recommends the best move for the current side-to-move. It will not play the move automatically.")
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                 }
@@ -126,9 +127,6 @@ fun FenLoadOverlay(
                         playerColor = selectedColor
                     )
                     if (started) {
-                        if (selectedMode == GameMode.HELPER_BOT) {
-                            viewModel.toggleHelperAutoPlay()
-                        }
                         showModeDialog = false
                         onFenLoaded()
                     }
