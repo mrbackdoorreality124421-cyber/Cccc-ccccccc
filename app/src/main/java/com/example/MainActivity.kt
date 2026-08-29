@@ -103,7 +103,9 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
                     FenLoadOverlay(
                         viewModel = viewModel,
                         onFenLoaded = { currentScreen = ScreenState.PLAY_BOARD },
-                        modifier = Modifier.align(Alignment.BottomCenter)
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 8.dp)
                     )
                 }
                 ScreenState.CUSTOM_BOARD -> CustomBoardScreen(viewModel, onBack = { currentScreen = ScreenState.MAIN_MENU }, onAnalyze = { currentScreen = ScreenState.PLAY_BOARD })
