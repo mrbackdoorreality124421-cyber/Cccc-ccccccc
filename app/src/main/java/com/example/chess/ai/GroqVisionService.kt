@@ -22,7 +22,6 @@ class GroqVisionService(context: Context) {
         .build()
 
     companion object {
-        // Current Groq multimodal model documented for image inputs.
         const val MODEL = "qwen/qwen3.6-27b"
         private const val BASE = "https://api.groq.com/openai/v1"
     }
@@ -75,6 +74,7 @@ class GroqVisionService(context: Context) {
                 .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", content)))
                 .put("temperature", 0)
                 .put("max_completion_tokens", 80)
+                .put("reasoning_effort", "none")
                 .toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder().url("$BASE/chat/completions")
                 .header("Authorization", "Bearer $key")
@@ -91,11 +91,12 @@ class GroqVisionService(context: Context) {
         }
     }
 
-    private fun cleanFen(raw: String): String {
-        return raw.replace("```fen", "", ignoreCase = true)
-            .replace("```", "")
-            .trim().lineSequence().firstOrNull { it.count { c -> c == '/' } == 7 }?.trim() ?: raw.trim()
-    }
+    private fun cleanFen(raw: String): String = raw.replace("```fen", "", ignoreCase = true)
+        .replace("```", "")
+        .trim()
+        .lineSequence()
+        .firstOrNull { it.count { c -> c == '/' } == 7 }
+        ?.trim() ?: raw.trim()
 
     private fun validateFen(fen: String): String {
         val fields = fen.split(Regex("\\s+"))
