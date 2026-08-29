@@ -212,9 +212,9 @@ object ArchiveExtractor {
             val entries = zip.entries()
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
-                val destFile = safeDestination(targetDir, entry.name) ?: run {
-                    continue
-                }
+                val destFile = safeDestination(targetDir, entry.name)
+                if (destFile == null) continue
+
                 if (entry.isDirectory) {
                     destFile.mkdirs()
                 } else {
