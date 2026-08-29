@@ -643,13 +643,20 @@ class OexEngineManager(private val context: Context) {
                 }
             }
 
-            // 3. Set position
-            if (movesUci.isNotEmpty()) {
+            // 3. Set position: strictly use the full authoritative FEN representation
+            val cleanFen = fen.trim()
+            if (cleanFen.isNotEmpty()) {
+                Log.d("UCI_SEARCH", "Sending position fen: $cleanFen")
+                writer.write("position fen $cleanFen\n")
+            } else if (movesUci.isNotEmpty()) {
                 val movesString = movesUci.joinToString(" ")
+                Log.d("UCI_SEARCH", "Sending position startpos moves: $movesString")
                 writer.write("position startpos moves $movesString\n")
             } else {
-                writer.write("position fen $fen\n")
+                Log.d("UCI_SEARCH", "Sending position startpos")
+                writer.write("position startpos\n")
             }
+            writer.flush()
 
             // 4. Send go command
             writer.write("go movetime $moveTimeMs depth $depth\n")

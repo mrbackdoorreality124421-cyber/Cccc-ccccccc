@@ -293,10 +293,11 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun parseUciToLegalMove(uci: String, position: ChessPosition): ChessMove? {
-        if (uci.length < 4) return null
-        val fromSq = Square.fromAlgebraic(uci.substring(0, 2)) ?: return null
-        val toSq = Square.fromAlgebraic(uci.substring(2, 4)) ?: return null
-        val promoType = if (uci.length >= 5) when (uci[4]) { 'q', 'Q' -> PieceType.QUEEN; 'r', 'R' -> PieceType.ROOK; 'b', 'B' -> PieceType.BISHOP; 'n', 'N' -> PieceType.KNIGHT; else -> null } else null
+        val trimmed = uci.trim()
+        if (trimmed.length < 4) return null
+        val fromSq = Square.fromAlgebraic(trimmed.substring(0, 2)) ?: return null
+        val toSq = Square.fromAlgebraic(trimmed.substring(2, 4)) ?: return null
+        val promoType = if (trimmed.length >= 5) when (trimmed[4].lowercaseChar()) { 'q' -> PieceType.QUEEN; 'r' -> PieceType.ROOK; 'b' -> PieceType.BISHOP; 'n' -> PieceType.KNIGHT; else -> null } else null
         return position.generateLegalMoves().find { it.from == fromSq && it.to == toSq && (promoType == null || it.promotion == promoType) }
     }
 
