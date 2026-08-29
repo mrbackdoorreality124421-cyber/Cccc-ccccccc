@@ -213,6 +213,10 @@ data class ChessPosition(
                 PieceType.KING -> generateKingMoves(from, piece, moves)
             }
         }
+
+        // Kings are never captured in chess. Checkmate ends the game before a
+        // pseudo-legal capture of the enemy king could ever be played.
+        moves.removeAll { it.capturedPiece == PieceType.KING }
         return moves
     }
 
@@ -522,30 +526,32 @@ data class ChessPosition(
         return sb.toString()
     }
 
+    /** True only for material combinations that are provably dead by force. */
     fun isInsufficientMaterial(): Boolean {
-        var whiteKnights = 0
-        var blackKnights = 0
-        var whiteBishops = 0
-        var blackBishops = 0
-        var otherPieces = 0
+        val bishops = mutableListOf<Square>()
+        var knightCount = 0
 
-        for (p in board) {
-            if (p == null) continue
+        for ((index, p) in board.withIndex()) {
+            p ?: continue
             when (p.type) {
                 PieceType.PAWN, PieceType.ROOK, PieceType.QUEEN -> return false
-                PieceType.KNIGHT -> if (p.color == PieceColor.WHITE) whiteKnights++ else blackKnights++
-                PieceType.BISHOP -> if (p.color == PieceColor.WHITE) whiteBishops++ else blackBishops++
-                PieceType.KING -> {}
+                PieceType.KNIGHT -> knightCount++
+                PieceType.BISHOP -> bishops.add(Square.fromIndex(index))
+                PieceType.KING -> Unit
             }
         }
 
-        val whiteMinors = whiteKnights + whiteBishops
-        val blackMinors = blackKnights + blackBishops
-
         // King vs King
-        if (whiteMinors == 0 && blackMinors == 0) return true
-        // King + Minor vs King
-        if ((whiteMinors == 1 && blackMinors == 0) || (blackMinors == 1 && whiteMinors == 0)) return true
+        if (bishops.isEmpty() && knightCount == 0) return true
+
+        // King + one bishop OR King + one knight vs bare king
+        if (bishops.size + knightCount == 1) return true
+
+        // King + bishop vs King + bishop is dead only when both bishops are
+        // confined to the same colour complex.
+        if (bishops.size == 2 && knightCount == 0) {
+            return bishops[0].isLightSquare == bishops[1].isLightSquare
+        }
 
         return false
     }
@@ -556,39 +562,65 @@ data class ChessPosition(
         }
 
         fun fromFen(fen: String): ChessPosition? {
-            try {
+            return runCatching {
                 val parts = fen.trim().split(Regex("\\s+"))
-                if (parts.size < 4) return null
+                if (parts.size !in 4..6) return null
 
                 val rows = parts[0].split('/')
                 if (rows.size != 8) return null
 
+                val active = when (parts[1].lowercase()) {
+                    "w" -> PieceColor.WHITE
+                    "b" -> PieceColor.BLACK
+                    else -> return null
+                }
+
+                val castlingPart = parts[2]
+                if (castlingPart != "-" &&
+                    (castlingPart.any { it !in "KQkq" } || castlingPart.toSet().size != castlingPart.length)
+                ) return null
+                val castling = CastlingRights.fromFen(castlingPart)
+
+                val epTarget = if (parts[3] == "-") null else Square.fromAlgebraic(parts[3]) ?: return null
+                if (epTarget != null && epTarget.rank !in setOf(2, 5)) return null
+
+                val halfmove = if (parts.size > 4) parts[4].toIntOrNull() ?: return null else 0
+                val fullmove = if (parts.size > 5) parts[5].toIntOrNull() ?: return null else 1
+                if (halfmove < 0 || fullmove < 1) return null
+
                 val newBoard = MutableList<ChessPiece?>(64) { null }
+                var whiteKings = 0
+                var blackKings = 0
 
                 for (rankIdx in 0..7) {
                     val rank = 7 - rankIdx
                     val rowStr = rows[rankIdx]
                     var file = 0
+
                     for (ch in rowStr) {
                         if (ch.isDigit()) {
-                            file += ch.digitToInt()
+                            val empty = ch.digitToInt()
+                            if (empty !in 1..8 || file + empty > 8) return null
+                            file += empty
                         } else {
-                            val piece = ChessPiece.fromFenChar(ch)
-                            if (piece != null && file in 0..7) {
-                                newBoard[rank * 8 + file] = piece
-                                file++
+                            val piece = ChessPiece.fromFenChar(ch) ?: return null
+                            if (file !in 0..7) return null
+                            newBoard[rank * 8 + file] = piece
+                            file++
+                            when {
+                                piece.type == PieceType.KING && piece.color == PieceColor.WHITE -> whiteKings++
+                                piece.type == PieceType.KING && piece.color == PieceColor.BLACK -> blackKings++
                             }
                         }
                     }
+
+                    if (file != 8) return null
                 }
 
-                val active = if (parts[1].lowercase() == "b") PieceColor.BLACK else PieceColor.WHITE
-                val castling = CastlingRights.fromFen(parts[2])
-                val epTarget = if (parts[3] != "-") Square.fromAlgebraic(parts[3]) else null
-                val halfmove = if (parts.size > 4) parts[4].toIntOrNull() ?: 0 else 0
-                val fullmove = if (parts.size > 5) parts[5].toIntOrNull() ?: 1 else 1
+                // A playable position must contain exactly one king per side.
+                if (whiteKings != 1 || blackKings != 1) return null
 
-                return ChessPosition(
+                ChessPosition(
                     board = newBoard,
                     activeColor = active,
                     castlingRights = castling,
@@ -596,9 +628,7 @@ data class ChessPosition(
                     halfmoveClock = halfmove,
                     fullmoveNumber = fullmove
                 )
-            } catch (e: Exception) {
-                return null
-            }
+            }.getOrNull()
         }
     }
 }

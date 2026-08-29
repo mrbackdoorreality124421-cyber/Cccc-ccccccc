@@ -12,11 +12,15 @@ object ArchiveExtractor {
     /**
      * Extracts an archive (.tar, .tar.gz, .tgz, .zip, .apk) or saves a direct binary to targetDir.
      * Returns the list of extracted files.
+     *
+     * Imported archives are treated as untrusted input. Every extracted path is canonicalized
+     * and required to remain inside targetDir to prevent path traversal writes.
      */
     fun extract(sourceStream: InputStream, fileName: String, targetDir: File): List<File> {
         if (!targetDir.exists()) {
             targetDir.mkdirs()
         }
+        require(targetDir.isDirectory) { "Extraction target is not a directory" }
 
         val lowerName = fileName.lowercase()
         return when {
@@ -64,12 +68,10 @@ object ArchiveExtractor {
                 }
 
                 if (read >= 2 && header[0] == 0x1F.toByte() && header[1] == 0x8B.toByte()) {
-                    // GZIP stream
                     GZIPInputStream(pushback).use { gzipIn ->
                         extractTarStream(gzipIn, targetDir)
                     }
                 } else if (read >= 4 && header[0] == 0x50.toByte() && header[1] == 0x4B.toByte()) {
-                    // ZIP stream
                     val tempZip = File(targetDir, "temp_${System.currentTimeMillis()}.zip")
                     FileOutputStream(tempZip).use { out ->
                         pushback.copyTo(out)
@@ -80,8 +82,9 @@ object ArchiveExtractor {
                 } else if (read >= 262 && isTarHeader(header)) {
                     extractTarStream(pushback, targetDir)
                 } else {
-                    // Direct binary (ELF or UCI executable)
-                    val rawFile = File(targetDir, if (fileName.isNotEmpty()) fileName else "stockfish_binary")
+                    // Direct binary: never allow the source name to escape targetDir.
+                    val safeName = File(fileName.ifEmpty { "stockfish_binary" }).name
+                    val rawFile = safeDestination(targetDir, safeName) ?: return emptyList()
                     FileOutputStream(rawFile).use { out ->
                         pushback.copyTo(out)
                     }
@@ -95,6 +98,20 @@ object ArchiveExtractor {
         if (header.size < 262) return false
         val magic = String(header, 257, 5, Charsets.US_ASCII)
         return magic.startsWith("ustar")
+    }
+
+    /** Returns a canonical destination only when it is strictly within targetDir. */
+    private fun safeDestination(targetDir: File, relativeName: String): File? {
+        val canonicalRoot = targetDir.canonicalFile
+        val destination = File(canonicalRoot, relativeName.replace('\\', '/')).canonicalFile
+        val rootPath = canonicalRoot.path
+        val destinationPath = destination.path
+        return if (destinationPath == rootPath || destinationPath.startsWith(rootPath + File.separator)) {
+            destination
+        } else {
+            Log.w(TAG, "Blocked archive path traversal: $relativeName")
+            null
+        }
     }
 
     /**
@@ -113,7 +130,6 @@ object ArchiveExtractor {
             }
             if (read < 512) break
 
-            // Check for EOF (all zero block)
             var allZero = true
             for (i in 0 until 512) {
                 if (headerBuf[i] != 0.toByte()) {
@@ -123,7 +139,6 @@ object ArchiveExtractor {
             }
             if (allZero) break
 
-            // 1. File name: bytes 0..99
             var nameLen = 0
             while (nameLen < 100 && headerBuf[nameLen] != 0.toByte()) {
                 nameLen++
@@ -131,55 +146,64 @@ object ArchiveExtractor {
             val entryName = String(headerBuf, 0, nameLen, Charsets.UTF_8).trim()
             if (entryName.isEmpty()) continue
 
-            // 2. File size in octal: bytes 124..135
-            var sizeStr = String(headerBuf, 124, 12, Charsets.US_ASCII).trim().replace("\u0000", "")
+            val sizeStr = String(headerBuf, 124, 12, Charsets.US_ASCII)
+                .trim()
+                .replace("\u0000", "")
             val size = try {
                 sizeStr.toLong(8)
             } catch (_: Exception) {
                 0L
             }
+            if (size < 0) {
+                Log.w(TAG, "Blocked invalid negative TAR size: $entryName")
+                return extractedFiles
+            }
 
-            // 3. Type flag at 156 ('0' / 0 = file, '5' = dir)
             val typeFlag = headerBuf[156].toInt().toChar()
-            val cleanName = entryName.replace("..", "").trimStart('/')
-            val destFile = File(targetDir, cleanName)
+            val destFile = safeDestination(targetDir, entryName)
 
-            if (typeFlag == '5' || cleanName.endsWith("/")) {
-                destFile.mkdirs()
+            if (typeFlag == '5' || entryName.endsWith("/")) {
+                if (destFile != null) destFile.mkdirs()
             } else {
-                destFile.parentFile?.mkdirs()
-                FileOutputStream(destFile).use { out ->
-                    var remaining = size
-                    val buf = ByteArray(8192)
-                    while (remaining > 0) {
-                        val toRead = Math.min(buf.size.toLong(), remaining).toInt()
-                        val r = inputStream.read(buf, 0, toRead)
-                        if (r == -1) break
-                        out.write(buf, 0, r)
-                        remaining -= r
-                    }
-                }
-                extractedFiles.add(destFile)
-
-                // TAR pads every record to a multiple of 512 bytes
-                val padding = (512 - (size % 512)) % 512
-                if (padding > 0) {
-                    var skipped = 0L
-                    while (skipped < padding) {
-                        val s = inputStream.skip(padding - skipped)
-                        if (s <= 0) {
-                            val dummy = ByteArray((padding - skipped).toInt())
-                            val r = inputStream.read(dummy)
+                if (destFile == null) {
+                    skipFully(inputStream, size)
+                } else {
+                    destFile.parentFile?.mkdirs()
+                    FileOutputStream(destFile).use { out ->
+                        var remaining = size
+                        val buf = ByteArray(8192)
+                        while (remaining > 0) {
+                            val toRead = Math.min(buf.size.toLong(), remaining).toInt()
+                            val r = inputStream.read(buf, 0, toRead)
                             if (r == -1) break
-                            skipped += r
-                        } else {
-                            skipped += s
+                            out.write(buf, 0, r)
+                            remaining -= r
                         }
                     }
+                    extractedFiles.add(destFile)
                 }
+
+                val padding = (512 - (size % 512)) % 512
+                if (padding > 0) skipFully(inputStream, padding)
             }
         }
         return extractedFiles
+    }
+
+    private fun skipFully(inputStream: InputStream, byteCount: Long) {
+        var remaining = byteCount
+        val discard = ByteArray(8192)
+        while (remaining > 0) {
+            val skipped = inputStream.skip(remaining)
+            if (skipped > 0) {
+                remaining -= skipped
+            } else {
+                val toRead = minOf(discard.size.toLong(), remaining).toInt()
+                val read = inputStream.read(discard, 0, toRead)
+                if (read == -1) break
+                remaining -= read
+            }
+        }
     }
 
     private fun extractZip(zipFile: File, targetDir: File): List<File> {
@@ -188,8 +212,9 @@ object ArchiveExtractor {
             val entries = zip.entries()
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
-                val cleanName = entry.name.replace("..", "").trimStart('/')
-                val destFile = File(targetDir, cleanName)
+                val destFile = safeDestination(targetDir, entry.name)
+                if (destFile == null) continue
+
                 if (entry.isDirectory) {
                     destFile.mkdirs()
                 } else {
@@ -228,17 +253,15 @@ object ArchiveExtractor {
         }
 
         if (elfFiles.isNotEmpty()) {
-            // Prioritize ARMv8 / 64-bit dotprod if multiple
             val prioritized = elfFiles.sortedWith(
                 compareByDescending<File> { it.name.contains("dotprod", ignoreCase = true) }
                     .thenByDescending { it.name.contains("armv8", ignoreCase = true) || it.name.contains("arm64", ignoreCase = true) }
                     .thenByDescending { it.name.contains("stockfish", ignoreCase = true) }
-                    .thenByDescending { it.length() } // Largest contains NNUE weights
+                    .thenByDescending { it.length() }
             )
             return prioritized.first()
         }
 
-        // 2. Fallback by name heuristics
         return files.filter { it.isFile }
             .sortedWith(
                 compareByDescending<File> { it.name.contains("stockfish", ignoreCase = true) }

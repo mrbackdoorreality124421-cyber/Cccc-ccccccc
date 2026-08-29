@@ -37,7 +37,7 @@ jobs:
       - name: Prepare Build Environment & Keystore
         run: |
           chmod +x gradlew || true
-          
+
           # Create .env if not exists to satisfy Secrets Gradle Plugin
           if [ ! -f .env ]; then
             touch .env
@@ -57,6 +57,10 @@ jobs:
               -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
+
+      - name: Run JVM unit tests
+        run: |
+          ./gradlew testDebugUnitTest --no-configuration-cache --no-daemon --stacktrace
 
       - name: Build Debug APK
         run: |

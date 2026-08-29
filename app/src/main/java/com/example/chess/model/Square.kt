@@ -12,6 +12,7 @@ data class Square(
 
     val algebraic: String
         get() {
+            require(isValid) { "Invalid square: file=$file rank=$rank" }
             val f = ('a'.code + file).toChar()
             val r = rank + 1
             return "$f$r"
@@ -26,12 +27,13 @@ data class Square(
             return Square(file = index % 8, rank = index / 8)
         }
 
+        /** Parses exactly one algebraic chess square such as e4. */
         fun fromAlgebraic(str: String): Square? {
-            if (str.length < 2) return null
-            val f = str[0].lowercaseChar() - 'a'
-            val r = str[1].digitToIntOrNull()?.minus(1) ?: return null
-            if (f !in 0..7 || r !in 0..7) return null
-            return Square(f, r)
+            if (str.length != 2) return null
+            val file = str[0].lowercaseChar() - 'a'
+            val rank = str[1].digitToIntOrNull()?.minus(1) ?: return null
+            if (file !in 0..7 || rank !in 0..7) return null
+            return Square(file, rank)
         }
     }
 
