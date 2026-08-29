@@ -355,20 +355,15 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         playerColor: PieceColor
     ): Boolean {
         val position = ChessPosition.fromFen(fenString) ?: return false
-
-        _gameMode.value = mode
-        _playerColor.value = playerColor
-
-        loadPosition(position)
-
-        if (mode == GameMode.PLAYER_VS_AI) {
-            if (position.activeColor != playerColor) {
-                triggerBotMove()
-            }
+        aiJob?.cancel()
+        _uiState.update { it.copy(position = position, moveHistory = emptyList(), positionHistory = listOf(position), redoStack = emptyList(), status = GameStatus.IN_PROGRESS, selectedSquare = null, legalMovesForSelected = emptyList(), lastMove = null, engineArrowMove = null, isEngineThinking = false, gameMode = mode, playerColor = playerColor, helperBotColor = playerColor, helperBotAutoPlay = true, boardOrientation = playerColor, isFenGame = true, promotionPending = null, activePuzzle = null, puzzleMessage = null) }
+        if (mode == GameMode.PLAYER_VS_AI && position.activeColor != playerColor) {
+            triggerAiMove(position)
         } else if (mode == GameMode.HELPER_BOT) {
-            triggerHelperSuggestion()
+            triggerHelperBotMove(position)
+        } else {
+            updateAssistantEvaluation()
         }
-
         return true
     }
 
