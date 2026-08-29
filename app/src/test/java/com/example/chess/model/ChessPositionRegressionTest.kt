@@ -75,7 +75,7 @@ class ChessPositionRegressionTest {
 
     @Test
     fun oppositeColorBishopsRemainTechnicallyPlayable() {
-        val position = ChessPosition.fromFen("4k3/8/8/8/8/8/3b4/2B1K3 w - - 0 1")!!
+        val position = ChessPosition.fromFen("4k3/8/8/8/8/8/3b4/5BK1 w - - 0 1")!!
         assertFalse(position.isInsufficientMaterial())
     }
 
