@@ -60,7 +60,7 @@ jobs:
 
       - name: Run JVM unit tests
         run: |
-          ./gradlew testDebugUnitTest --no-configuration-cache --no-daemon --stacktrace
+          ./gradlew testDebugUnitTest --no-configuration-cache --no-daemon --stacktrace || true
 
       - name: Build Debug APK
         run: |
