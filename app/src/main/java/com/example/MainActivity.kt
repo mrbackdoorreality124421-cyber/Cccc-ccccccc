@@ -98,7 +98,14 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
                 ScreenState.PLAY_BOARD -> PlayScreen(viewModel, onBackToMenu = { currentScreen = ScreenState.MAIN_MENU }, onOpenSettings = { currentScreen = ScreenState.SETTINGS })
                 ScreenState.PUZZLES -> PuzzlesScreen(viewModel, onPuzzleSelected = { currentScreen = ScreenState.PLAY_BOARD })
                 ScreenState.HISTORY -> HistoryScreen(viewModel)
-                ScreenState.SETTINGS -> SettingsScreen(viewModel, onFenLoaded = { currentScreen = ScreenState.PLAY_BOARD })
+                ScreenState.SETTINGS -> Box(modifier = Modifier.fillMaxSize()) {
+                    SettingsScreen(viewModel, onFenLoaded = { currentScreen = ScreenState.PLAY_BOARD })
+                    FenLoadOverlay(
+                        viewModel = viewModel,
+                        onFenLoaded = { currentScreen = ScreenState.PLAY_BOARD },
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
                 ScreenState.CUSTOM_BOARD -> CustomBoardScreen(viewModel, onBack = { currentScreen = ScreenState.MAIN_MENU }, onAnalyze = { currentScreen = ScreenState.PLAY_BOARD })
                 ScreenState.IMAGE_PUZZLE -> ImagePuzzleScreen(viewModel, onBack = { currentScreen = ScreenState.MAIN_MENU }, onOpenCustomBoard = { currentScreen = ScreenState.CUSTOM_BOARD }, onAnalyze = { currentScreen = ScreenState.PLAY_BOARD })
             }
