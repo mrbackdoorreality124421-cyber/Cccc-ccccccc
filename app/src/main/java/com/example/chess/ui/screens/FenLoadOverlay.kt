@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.dp
 import com.example.chess.model.ChessPosition
 import com.example.chess.model.GameMode
 import com.example.chess.model.PieceColor
-import com.example.chess.viewmodel.ChessViewModel
+import com.example.chess.ui.ChessViewModel
 
 @Composable
 fun FenLoadOverlay(
