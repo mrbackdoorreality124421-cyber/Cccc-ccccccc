@@ -42,13 +42,13 @@ class MainActivity : ComponentActivity() {
 fun ChessAppRoot(viewModel: ChessViewModel) {
     var currentScreen by remember { mutableStateOf(ScreenState.ENGINE_DISCOVERY) }
     val secondary = currentScreen != ScreenState.ENGINE_DISCOVERY && currentScreen != ScreenState.MAIN_MENU
-    val ownChrome = currentScreen == ScreenState.PLAY_BOARD || currentScreen == ScreenState.CUSTOM_BOARD || currentScreen == ScreenState.IMAGE_PUZZLE
+    val ownChrome = currentScreen == ScreenState.PLAY_BOARD || currentScreen == ScreenState.CUSTOM_BOARD || currentScreen == ScreenState.IMAGE_PUZZLE || currentScreen == ScreenState.MAIN_MENU
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (!ownChrome && currentScreen != ScreenState.ENGINE_DISCOVERY) {
+            if (currentScreen == ScreenState.PUZZLES || currentScreen == ScreenState.HISTORY || currentScreen == ScreenState.SETTINGS) {
                 TopAppBar(
                     title = {
                         if (currentScreen == ScreenState.MAIN_MENU) {
@@ -80,7 +80,7 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
             }
         },
         bottomBar = {
-            if (!ownChrome && currentScreen != ScreenState.ENGINE_DISCOVERY) {
+            if (currentScreen == ScreenState.MAIN_MENU || currentScreen == ScreenState.PUZZLES || currentScreen == ScreenState.HISTORY || currentScreen == ScreenState.SETTINGS) {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
                     NavigationBarItem(currentScreen == ScreenState.MAIN_MENU, { currentScreen = ScreenState.MAIN_MENU }, { Icon(Icons.Default.Home, null) }, label = { Text("Home") }, modifier = Modifier.testTag("nav_tab_menu"))
                     NavigationBarItem(currentScreen == ScreenState.PLAY_BOARD, { currentScreen = ScreenState.PLAY_BOARD }, { Icon(Icons.Default.SportsEsports, null) }, label = { Text("Play") }, modifier = Modifier.testTag("nav_tab_board"))
@@ -94,7 +94,7 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
         Crossfade(targetState = currentScreen, label = "screen_transition", modifier = Modifier.padding(innerPadding)) { screen ->
             when (screen) {
                 ScreenState.ENGINE_DISCOVERY -> EngineDiscoveryHomeScreen(viewModel, onEngineSelected = { currentScreen = ScreenState.MAIN_MENU })
-                ScreenState.MAIN_MENU -> MainMenuScreen(viewModel, onStartGame = { currentScreen = ScreenState.PLAY_BOARD }, onChangeEngine = { currentScreen = ScreenState.ENGINE_DISCOVERY }, onOpenPuzzles = { currentScreen = ScreenState.PUZZLES }, onOpenHistory = { currentScreen = ScreenState.HISTORY }, onOpenSettings = { currentScreen = ScreenState.SETTINGS })
+                ScreenState.MAIN_MENU -> MainMenuScreen(viewModel, onStartGame = { currentScreen = ScreenState.PLAY_BOARD }, onChangeEngine = { currentScreen = ScreenState.ENGINE_DISCOVERY }, onOpenPuzzles = { currentScreen = ScreenState.PUZZLES }, onOpenHistory = { currentScreen = ScreenState.HISTORY }, onOpenSettings = { currentScreen = ScreenState.SETTINGS }, onOpenVisionPuzzle = { currentScreen = ScreenState.IMAGE_PUZZLE }, onOpenBoardEditor = { currentScreen = ScreenState.CUSTOM_BOARD })
                 ScreenState.PLAY_BOARD -> PlayScreen(viewModel, onBackToMenu = { currentScreen = ScreenState.MAIN_MENU }, onOpenSettings = { currentScreen = ScreenState.SETTINGS })
                 ScreenState.PUZZLES -> PuzzlesScreen(viewModel, onPuzzleSelected = { currentScreen = ScreenState.PLAY_BOARD })
                 ScreenState.HISTORY -> HistoryScreen(viewModel)

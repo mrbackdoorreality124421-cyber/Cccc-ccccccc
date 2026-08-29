@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.chess.data.SecurePreferences
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.example.chess.model.BoardTheme
 import com.example.chess.ui.ChessViewModel
 
@@ -38,6 +40,8 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val discoveredEngines by viewModel.discoveredOexEngines.collectAsState()
     val context = LocalContext.current
+    var groqApiKey by remember { mutableStateOf(SecurePreferences.getGroqApiKey(context) ?: "") }
+
 
     var showFenDialog by remember { mutableStateOf(false) }
     var fenInputText by remember { mutableStateOf("") }
@@ -423,79 +427,5 @@ fun SettingsScreen(
             }
         }
 
-        // Section 4: Position Setup (FEN Import)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "Position Setup (FEN)",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Load custom Forsyth–Edwards Notation string to analyze or play from specific positions.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Button(
-                    onClick = { showFenDialog = true },
-                    modifier = Modifier.fillMaxWidth().testTag("btn_load_fen")
-                ) {
-                    Icon(Icons.Default.Input, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Load FEN String")
-                }
-            }
-        }
-    }
-
-    // FEN Dialog
-    if (showFenDialog) {
-        AlertDialog(
-            onDismissRequest = { showFenDialog = false },
-            title = { Text("Load Custom FEN", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Paste standard FEN position notation:")
-                    OutlinedTextField(
-                        value = fenInputText,
-                        onValueChange = { fenInputText = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1") },
-                        maxLines = 3
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val success = viewModel.loadFen(fenInputText.trim())
-                        if (success) {
-                            Toast.makeText(context, "Position loaded successfully", Toast.LENGTH_SHORT).show()
-                            showFenDialog = false
-                            onFenLoaded()
-                        } else {
-                            Toast.makeText(context, "Invalid FEN string", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                ) {
-                    Text("Load")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFenDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
+}
 }

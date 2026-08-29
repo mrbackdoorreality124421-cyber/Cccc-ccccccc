@@ -21,8 +21,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.chess.model.ChessPosition
+import com.example.chess.model.GameMode
 import com.example.chess.model.PieceColor
 import com.example.chess.ui.ChessViewModel
+import com.example.chess.ui.components.ChessBoard2D
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,13 +36,17 @@ fun MainMenuScreen(
     onOpenPuzzles: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenVisionPuzzle: () -> Unit,
+    onOpenBoardEditor: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
 
     var showPvBotDialog by remember { mutableStateOf(false) }
     var showHelperBotDialog by remember { mutableStateOf(false) }
-
+    var showFenDialog by remember { mutableStateOf(false) }
+    var fenInput by remember { mutableStateOf("") }
+    
     var selectedPlayerColor by remember { mutableStateOf(PieceColor.WHITE) }
     var selectedHelperColor by remember { mutableStateOf(PieceColor.WHITE) }
     var helperAutoPlay by remember { mutableStateOf(true) }
@@ -52,421 +59,304 @@ fun MainMenuScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header / Active Engine Badge Card
+
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            state.isStockfishActive -> Color(0xFF1B5E20)
-                            state.isExternalEngineRunning -> MaterialTheme.colorScheme.primaryContainer
-                            else -> MaterialTheme.colorScheme.errorContainer
-                        }
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.weight(1f)
+                        Box(
+                            modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF10B981)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = when {
-                                        state.isStockfishActive -> Icons.Default.Bolt
-                                        state.isExternalEngineRunning -> Icons.Default.SmartToy
-                                        else -> Icons.Default.Warning
-                                    },
-                                    contentDescription = null,
-                                    tint = if (state.isExternalEngineRunning) Color.White else MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-
-                            Column {
-                                Text(
-                                    text = if (state.isExternalEngineRunning) "ACTIVE ENGINE" else "ENGINE STATUS",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (state.isExternalEngineRunning) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onErrorContainer,
-                                    letterSpacing = 0.8.sp
-                                )
-                                Text(
-                                    text = state.activeEngineName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (state.isExternalEngineRunning) Color.White else MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
+                            Text("♞", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                         }
-
-                        FilledTonalButton(
-                            onClick = onChangeEngine,
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = if (state.isExternalEngineRunning) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.error,
-                                contentColor = if (state.isExternalEngineRunning) Color.White else MaterialTheme.colorScheme.onError
-                            ),
-                            modifier = Modifier.testTag("change_engine_button")
-                        ) {
-                            Text(if (state.isExternalEngineRunning) "Switch" else "Setup", fontWeight = FontWeight.SemiBold)
+                        Column {
+                            Text("CHESS FORGE", fontWeight = FontWeight.ExtraBold, letterSpacing = 1.2.sp, style = MaterialTheme.typography.titleLarge)
+                            Text("ENGINE • PUZZLES • ANALYSIS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
             }
-
-            // Section Title
+            // Header
             item {
                 Text(
-                    text = "SELECT GAME MODE",
+                    text = "PLAY",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     letterSpacing = 1.sp
                 )
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // Mode 1: Player vs Bot Card
+            // Primary Card: Play vs Stockfish
             item {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
                         .clickable { showPvBotDialog = true }
-                        .testTag("mode_player_vs_bot"),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                        .testTag("menu_play_bot"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp)
+                    Row(
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Brush.linearGradient(listOf(Color(0xFF4CAF50), Color(0xFF2E7D32)))),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.SportsEsports,
-                                    contentDescription = "Player vs Bot",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(30.dp)
-                                )
-                            }
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Player vs Bot",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Play a full game against ${state.activeEngineName}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            Icon(
-                                Icons.Default.ArrowForwardIos,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Icon(Icons.Default.SmartToy, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
                         }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            SuggestionChip(
-                                onClick = { showPvBotDialog = true },
-                                label = { Text("Custom Color") }
-                            )
-                            SuggestionChip(
-                                onClick = { showPvBotDialog = true },
-                                label = { Text("Level & Depth") }
-                            )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Play vs Stockfish", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text("Challenge the powerful chess engine", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+            
+            // Secondary Modes Row
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Custom Board Setup
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onOpenBoardEditor() }
+                            .testTag("menu_board_editor"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFFE91E63), modifier = Modifier.size(28.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Board Setup", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    
+                    // FEN Load
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { showFenDialog = true }
+                            .testTag("menu_load_fen"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = null, tint = Color(0xFF009688), modifier = Modifier.size(28.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Load FEN", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            // Mode 2: Helper Bot Card
+            // Learning & Analysis
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .clickable { showHelperBotDialog = true }
-                        .testTag("mode_helper_bot"),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    border = CardDefaults.outlinedCardBorder().copy(
-                        brush = Brush.linearGradient(
-                            listOf(Color(0xFF2E7D32), Color(0xFF10B981))
-                        )
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(Color(0xFF2E7D32), Color(0xFF10B981))
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.AutoFixHigh,
-                                    contentDescription = "Helper Bot",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(30.dp)
-                                )
-                            }
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = "Helper Bot",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = Color(0xFF2E7D32).copy(alpha = 0.2f)
-                                    ) {
-                                        Text(
-                                            text = "AUTOPILOT & ARROW",
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF2E7D32)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "Bot automatically plays your color & draws live on-board move arrows",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            Icon(
-                                Icons.Default.ArrowForwardIos,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            SuggestionChip(
-                                onClick = { showHelperBotDialog = true },
-                                label = { Text("⚡ Auto-Play Moves") }
-                            )
-                            SuggestionChip(
-                                onClick = { showHelperBotDialog = true },
-                                label = { Text("🏹 Move Arrow Indicator") }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Quick Tools Row
-            item {
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "ADDITIONAL FEATURES",
+                    text = "LEARN & ANALYZE",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     letterSpacing = 1.sp
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            
+            // Helper Bot
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showHelperBotDialog = true }
+                        .testTag("menu_helper_bot"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF2196F3).copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = Color(0xFF2196F3))
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Helper Bot", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Engine plays your color & highlights moves", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+            
+            // Vision Puzzle
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenVisionPuzzle() }
+                        .testTag("menu_vision_puzzle"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF673AB7).copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.ImageSearch, contentDescription = null, tint = Color(0xFF673AB7))
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("AI Vision Puzzle", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Scan real boards to get FEN", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
 
+            // Quick Actions Row
             item {
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { onOpenPuzzles() }
-                            .testTag("menu_puzzles"),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                        modifier = Modifier.weight(1f).clickable { onOpenPuzzles() }.testTag("menu_puzzles"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.Extension,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(32.dp)
-                            )
+                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Tactical Puzzles",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("Puzzles", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                     }
-
                     Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { onOpenHistory() }
-                            .testTag("menu_history"),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                        modifier = Modifier.weight(1f).clickable { onOpenHistory() }.testTag("menu_history"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.History,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(32.dp)
-                            )
+                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Match History",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("History", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                     }
-
                     Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { onOpenSettings() }
-                            .testTag("menu_settings"),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                        modifier = Modifier.weight(1f).clickable { onOpenSettings() }.testTag("menu_settings"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.Settings,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.size(32.dp)
-                            )
+                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.height(8.dp))
+                            Text("Settings", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+            
+            // Engine Info
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onChangeEngine() }
+                        .testTag("menu_change_engine"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Memory,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Settings",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
+                                text = "Active Engine",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = state.activeEngineName ?: "No Engine Loaded",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
+                        Icon(
+                            Icons.Default.SwapHoriz,
+                            contentDescription = "Change Engine",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 }
             }
         }
     }
 
-    // Dialog for Player vs Bot setup
+    // PvP / PvBot Dialog
     if (showPvBotDialog) {
         AlertDialog(
             onDismissRequest = { showPvBotDialog = false },
-            title = {
-                Text("Player vs Bot Settings", fontWeight = FontWeight.Bold)
-            },
+            title = { Text("Play vs Stockfish", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Choose your color to play against ${state.activeEngineName}:", style = MaterialTheme.typography.bodyMedium)
-
+                    Text("Choose your color:")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        OutlinedButton(
+                        FilterChip(
+                            selected = selectedPlayerColor == PieceColor.WHITE,
                             onClick = { selectedPlayerColor = PieceColor.WHITE },
-                            modifier = Modifier.weight(1f),
-                            colors = if (selectedPlayerColor == PieceColor.WHITE) ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer) else ButtonDefaults.outlinedButtonColors()
-                        ) {
-                            Text("⚪ White")
-                        }
-
-                        OutlinedButton(
+                            label = { Text("White") }
+                        )
+                        FilterChip(
+                            selected = selectedPlayerColor == PieceColor.BLACK,
                             onClick = { selectedPlayerColor = PieceColor.BLACK },
-                            modifier = Modifier.weight(1f),
-                            colors = if (selectedPlayerColor == PieceColor.BLACK) ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer) else ButtonDefaults.outlinedButtonColors()
-                        ) {
-                            Text("⚫ Black")
-                        }
+                            label = { Text("Black") }
+                        )
                     }
                 }
             },
@@ -474,65 +364,46 @@ fun MainMenuScreen(
                 Button(
                     onClick = {
                         showPvBotDialog = false
-                        viewModel.startPlayerVsBot(selectedPlayerColor)
+                        viewModel.startPlayerVsBot(color = selectedPlayerColor)
                         onStartGame()
                     }
-                ) {
-                    Text("Start Match")
-                }
+                ) { Text("Start Game") }
             },
             dismissButton = {
-                TextButton(onClick = { showPvBotDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showPvBotDialog = false }) { Text("Cancel") }
             }
         )
     }
 
-    // Dialog for Helper Bot setup
+    // Helper Bot Dialog
     if (showHelperBotDialog) {
         AlertDialog(
             onDismissRequest = { showHelperBotDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = Color(0xFF2E7D32))
-                    Text("Helper Bot Setup", fontWeight = FontWeight.Bold)
-                }
-            },
+            title = { Text("Helper Bot Settings", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Select which side the Helper Bot will play or guide with dynamic move arrows:", style = MaterialTheme.typography.bodyMedium)
-
+                    Text("Which color should the bot play?")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        OutlinedButton(
+                        FilterChip(
+                            selected = selectedHelperColor == PieceColor.WHITE,
                             onClick = { selectedHelperColor = PieceColor.WHITE },
-                            modifier = Modifier.weight(1f),
-                            colors = if (selectedHelperColor == PieceColor.WHITE) ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF2E7D32).copy(alpha = 0.2f)) else ButtonDefaults.outlinedButtonColors()
-                        ) {
-                            Text("⚪ White")
-                        }
-
-                        OutlinedButton(
+                            label = { Text("White") }
+                        )
+                        FilterChip(
+                            selected = selectedHelperColor == PieceColor.BLACK,
                             onClick = { selectedHelperColor = PieceColor.BLACK },
-                            modifier = Modifier.weight(1f),
-                            colors = if (selectedHelperColor == PieceColor.BLACK) ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF2E7D32).copy(alpha = 0.2f)) else ButtonDefaults.outlinedButtonColors()
-                        ) {
-                            Text("⚫ Black")
-                        }
+                            label = { Text("Black") }
+                        )
                     }
-
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Auto-Play Moves", fontWeight = FontWeight.SemiBold)
-                            Text("Bot automatically makes the move after showing the arrow", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                        Text("Auto-play Bot's moves")
                         Switch(
                             checked = helperAutoPlay,
                             onCheckedChange = { helperAutoPlay = it }
@@ -544,18 +415,97 @@ fun MainMenuScreen(
                 Button(
                     onClick = {
                         showHelperBotDialog = false
-                        viewModel.startHelperBot(selectedHelperColor, helperAutoPlay)
+                        viewModel.startHelperBot(
+                            botColor = selectedHelperColor,
+                            autoPlay = helperAutoPlay
+                        )
                         onStartGame()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                ) {
-                    Text("Launch Helper Bot")
-                }
+                    }
+                ) { Text("Start Helper Mode") }
             },
             dismissButton = {
-                TextButton(onClick = { showHelperBotDialog = false }) {
-                    Text("Cancel")
+                TextButton(onClick = { showHelperBotDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+    
+    // FEN Load Dialog
+    if (showFenDialog) {
+        var fenPreviewError by remember { mutableStateOf<String?>(null) }
+        var previewPosition by remember { mutableStateOf<ChessPosition?>(null) }
+        
+        AlertDialog(
+            onDismissRequest = { showFenDialog = false },
+            title = { Text("Load Position from FEN", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = fenInput,
+                        onValueChange = { 
+                            fenInput = it
+                            val pos = ChessPosition.fromFen(it.trim())
+                            if (pos != null) {
+                                previewPosition = pos
+                                fenPreviewError = null
+                            } else {
+                                previewPosition = null
+                                fenPreviewError = if (it.isNotBlank()) "Invalid FEN string" else null
+                            }
+                        },
+                        label = { Text("Paste FEN String") },
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = fenPreviewError != null,
+                        supportingText = { fenPreviewError?.let { Text(it) } },
+                        singleLine = true
+                    )
+                    
+                    if (previewPosition != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                        ) {
+                            ChessBoard2D(
+                                position = previewPosition!!,
+                                selectedSquare = null,
+                                legalMoves = emptyList(),
+                                onSquareClicked = {},
+                                lastMove = null,
+                                engineArrowMove = null,
+                                orientation = PieceColor.WHITE,
+                                
+                                theme = state.boardTheme
+                            )
+                        }
+                    }
                 }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val pos = previewPosition
+                        if (pos != null) {
+                            viewModel.startCustomGame(fenInput.trim(), GameMode.ANALYSIS, PieceColor.WHITE)
+                            showFenDialog = false
+                            onStartGame()
+                        }
+                    },
+                    enabled = previewPosition != null
+                ) { Text("Analyze") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        val pos = previewPosition
+                        if (pos != null) {
+                            viewModel.startCustomGame(fenInput.trim(), GameMode.PLAYER_VS_AI, pos.activeColor)
+                            showFenDialog = false
+                            onStartGame()
+                        }
+                    },
+                    enabled = previewPosition != null
+                ) { Text("Play vs AI") }
             }
         )
     }

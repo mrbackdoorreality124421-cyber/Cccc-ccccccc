@@ -233,7 +233,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
             val oexResult = oexEngineManager.findBestMove(currentPos.toFen(), movesUci, state.aiSearchDepth, state.aiMoveTimeMs) { scoreCp, mateIn, _, _ -> _uiState.update { it.copy(engineEvaluationCp = scoreCp, engineMateIn = mateIn) } }
             _uiState.update { it.copy(isEngineThinking = false, engineEvaluationCp = oexResult?.scoreCp ?: 0, engineMateIn = oexResult?.mateIn) }
             val matchingMove = oexResult?.bestMoveUci?.let { parseUciToLegalMove(it, currentPos) }
-            if (matchingMove != null && _uiState.value.status == GameStatus.IN_PROGRESS) executeMove(matchingMove)
+            if (matchingMove != null && _uiState.value.status == GameStatus.IN_PROGRESS) { executeMove(matchingMove); _uiState.update { it.copy(engineArrowMove = matchingMove) } }
             else if (matchingMove == null && _uiState.value.status == GameStatus.IN_PROGRESS) _uiState.update { it.copy(engineErrorMessage = "Engine Error: External engine failed to calculate a move. Check engine logs or binary permissions.") }
         }
     }
@@ -253,7 +253,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
             val oexResult = oexEngineManager.findBestMove(currentPos.toFen(), movesUci, state.aiSearchDepth, state.aiMoveTimeMs) { scoreCp, mateIn, _, _ -> _uiState.update { it.copy(engineEvaluationCp = scoreCp, engineMateIn = mateIn) } }
             val calculatedMove = oexResult?.bestMoveUci?.let { parseUciToLegalMove(it, currentPos) }
             _uiState.update { it.copy(isEngineThinking = false, engineArrowMove = calculatedMove, engineEvaluationCp = oexResult?.scoreCp ?: 0, engineMateIn = oexResult?.mateIn, engineErrorMessage = if (calculatedMove == null) "Engine Error: Could not calculate helper move." else null) }
-            if (calculatedMove != null && _uiState.value.status == GameStatus.IN_PROGRESS && _uiState.value.helperBotAutoPlay) { delay(600); executeMove(calculatedMove); _uiState.update { it.copy(engineArrowMove = null) } }
+            if (calculatedMove != null && _uiState.value.status == GameStatus.IN_PROGRESS && _uiState.value.helperBotAutoPlay) { delay(600); executeMove(calculatedMove); _uiState.update { it.copy(engineArrowMove = calculatedMove) } }
         }
     }
 
@@ -344,6 +344,47 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         val pos = ChessPosition.fromFen(puzzle.initialFen) ?: return
         val playerColor = if (puzzle.playerColor == "BLACK") PieceColor.BLACK else PieceColor.WHITE
         _uiState.update { it.copy(position = pos, moveHistory = emptyList(), positionHistory = listOf(pos), redoStack = emptyList(), status = GameStatus.IN_PROGRESS, selectedSquare = null, legalMovesForSelected = emptyList(), lastMove = null, engineArrowMove = null, isEngineThinking = false, gameMode = GameMode.TACTICAL_PUZZLE, boardOrientation = playerColor, playerColor = playerColor, activePuzzle = puzzle, puzzleMoveIndex = 0, puzzleMessage = puzzle.description) }
+    }
+
+    fun startCustomGame(fenString: String, mode: GameMode, playerColor: PieceColor): Boolean {
+        val pos = ChessPosition.fromFen(fenString) ?: return false
+        aiJob?.cancel()
+        oexEngineManager.sendNewGame()
+        gameStartTime = System.currentTimeMillis()
+        
+        _uiState.update {
+            it.copy(
+                position = pos,
+                moveHistory = emptyList(),
+                positionHistory = listOf(pos),
+                redoStack = emptyList(),
+                status = GameStatus.IN_PROGRESS,
+                selectedSquare = null,
+                legalMovesForSelected = emptyList(),
+                lastMove = null,
+                engineArrowMove = null,
+                isEngineThinking = false,
+                engineEvaluationCp = 0,
+                engineMateIn = null,
+                gameMode = mode,
+                playerColor = playerColor,
+                helperBotColor = playerColor,
+                boardOrientation = playerColor,
+                isAssistantMode = (mode == GameMode.HELPER_BOT) || it.isAssistantMode,
+                promotionPending = null,
+                activePuzzle = null,
+                puzzleMessage = null
+            )
+        }
+        
+        if (mode == GameMode.PLAYER_VS_AI && pos.activeColor != playerColor) {
+            triggerAiMove(pos)
+        } else if (mode == GameMode.HELPER_BOT && pos.activeColor == playerColor) {
+            triggerHelperBotMove(pos)
+        } else {
+            updateAssistantEvaluation()
+        }
+        return true
     }
 
     fun loadFen(fenString: String): Boolean {
