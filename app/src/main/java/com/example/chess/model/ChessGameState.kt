@@ -43,6 +43,7 @@ data class ChessGameState(
     val boardOrientation: PieceColor = PieceColor.WHITE,
     val is3DView: Boolean = false,
     val isAssistantMode: Boolean = false,
+    val isFenGame: Boolean = false,
     val isHapticEnabled: Boolean = true,
     val isSoundEnabled: Boolean = true,
     val boardTheme: BoardTheme = BoardTheme.TOURNAMENT_GREEN,
