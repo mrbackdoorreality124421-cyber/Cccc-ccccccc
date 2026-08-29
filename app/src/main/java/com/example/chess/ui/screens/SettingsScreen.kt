@@ -427,5 +427,56 @@ fun SettingsScreen(
             }
         }
 
-}
+        // Section 4: Load FEN Position
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Terminal, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "FEN Position Loader",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Text(
+                    text = "Load custom positions from FEN strings and choose to Play Against Bot or use Bot Helper.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Button(
+                    onClick = { showFenDialog = true },
+                    modifier = Modifier.fillMaxWidth().testTag("settings_fen_load_button"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Terminal, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Load FEN Position")
+                }
+            }
+        }
+    }
+
+    FenLoadDialog(
+        isOpen = showFenDialog,
+        onDismiss = { showFenDialog = false },
+        viewModel = viewModel,
+        onFenLoaded = {
+            showFenDialog = false
+            onFenLoaded()
+        }
+    )
 }

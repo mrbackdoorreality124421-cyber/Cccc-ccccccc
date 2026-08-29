@@ -624,7 +624,14 @@ private fun StatusCardView(state: ChessGameState, isCompact: Boolean) {
 
             Text(
                 text = state.puzzleMessage ?: when {
-                    state.gameMode == GameMode.HELPER_BOT -> "Helper Bot automatically executes best calculated moves."
+                    state.gameMode == GameMode.HELPER_BOT -> {
+                        if (state.position.activeColor == state.helperBotColor) {
+                            if (state.helperBotAutoPlay) "Helper Bot is calculating & playing for ${if (state.helperBotColor == PieceColor.WHITE) "White" else "Black"}."
+                            else "Helper Bot suggests best move for ${if (state.helperBotColor == PieceColor.WHITE) "White" else "Black"}."
+                        } else {
+                            "Your turn. Play the move for ${if (state.helperBotColor == PieceColor.WHITE) "Black" else "White"}."
+                        }
+                    }
                     state.gameMode == GameMode.PLAYER_VS_AI -> if (state.position.activeColor == state.playerColor) "Your turn. Select a piece to move." else "Bot is calculating response."
                     state.position.isKingInCheck(state.position.activeColor) -> "King is under direct attack!"
                     else -> "Select a piece to view legal moves."
@@ -646,7 +653,7 @@ private fun PlayerRoleCardsRow(state: ChessGameState, isCompact: Boolean) {
     val player1Name = if (state.gameMode == GameMode.PLAYER_VS_AI) {
         if (leftIsWhite) "You" else state.activeEngineName
     } else if (state.gameMode == GameMode.HELPER_BOT) {
-        if (state.helperBotColor == PieceColor.WHITE) state.activeEngineName else "Opponent"
+        if (state.helperBotColor == PieceColor.WHITE) "Helper Bot" else "You (Manual)"
     } else {
         "White Player"
     }
@@ -654,7 +661,7 @@ private fun PlayerRoleCardsRow(state: ChessGameState, isCompact: Boolean) {
     val player2Name = if (state.gameMode == GameMode.PLAYER_VS_AI) {
         if (!leftIsWhite) "You" else state.activeEngineName
     } else if (state.gameMode == GameMode.HELPER_BOT) {
-        if (state.helperBotColor == PieceColor.BLACK) state.activeEngineName else "Opponent"
+        if (state.helperBotColor == PieceColor.BLACK) "Helper Bot" else "You (Manual)"
     } else {
         "Black Player"
     }

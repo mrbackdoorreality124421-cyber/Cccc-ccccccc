@@ -430,83 +430,13 @@ fun MainMenuScreen(
     }
     
     // FEN Load Dialog
-    if (showFenDialog) {
-        var fenPreviewError by remember { mutableStateOf<String?>(null) }
-        var previewPosition by remember { mutableStateOf<ChessPosition?>(null) }
-        
-        AlertDialog(
-            onDismissRequest = { showFenDialog = false },
-            title = { Text("Load Position from FEN", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = fenInput,
-                        onValueChange = { 
-                            fenInput = it
-                            val pos = ChessPosition.fromFen(it.trim())
-                            if (pos != null) {
-                                previewPosition = pos
-                                fenPreviewError = null
-                            } else {
-                                previewPosition = null
-                                fenPreviewError = if (it.isNotBlank()) "Invalid FEN string" else null
-                            }
-                        },
-                        label = { Text("Paste FEN String") },
-                        modifier = Modifier.fillMaxWidth(),
-                        isError = fenPreviewError != null,
-                        supportingText = { fenPreviewError?.let { Text(it) } },
-                        singleLine = true
-                    )
-                    
-                    if (previewPosition != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                        ) {
-                            ChessBoard2D(
-                                position = previewPosition!!,
-                                selectedSquare = null,
-                                legalMoves = emptyList(),
-                                onSquareClicked = {},
-                                lastMove = null,
-                                engineArrowMove = null,
-                                orientation = PieceColor.WHITE,
-                                
-                                theme = state.boardTheme
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val pos = previewPosition
-                        if (pos != null) {
-                            viewModel.startCustomGame(fenInput.trim(), GameMode.ANALYSIS, PieceColor.WHITE)
-                            showFenDialog = false
-                            onStartGame()
-                        }
-                    },
-                    enabled = previewPosition != null
-                ) { Text("Analyze") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        val pos = previewPosition
-                        if (pos != null) {
-                            viewModel.startCustomGame(fenInput.trim(), GameMode.PLAYER_VS_AI, pos.activeColor)
-                            showFenDialog = false
-                            onStartGame()
-                        }
-                    },
-                    enabled = previewPosition != null
-                ) { Text("Play vs AI") }
-            }
-        )
-    }
+    FenLoadDialog(
+        isOpen = showFenDialog,
+        onDismiss = { showFenDialog = false },
+        viewModel = viewModel,
+        onFenLoaded = {
+            showFenDialog = false
+            onStartGame()
+        }
+    )
 }

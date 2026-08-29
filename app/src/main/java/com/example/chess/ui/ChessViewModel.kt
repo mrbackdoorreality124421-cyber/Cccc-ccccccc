@@ -182,10 +182,13 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
             if (currentState.gameMode == GameMode.PLAYER_VS_AI && nextPos.activeColor != currentState.playerColor) {
                 triggerAiMove(nextPos)
             } else if (currentState.gameMode == GameMode.HELPER_BOT) {
-                // Helper bot always suggests the next move for the side-to-move
-                // Update helperBotColor to match the new side-to-move
-                _uiState.update { it.copy(helperBotColor = nextPos.activeColor) }
-                triggerHelperBotMove(nextPos)
+                // When it is helper bot's selected color turn, calculate and execute/suggest move
+                if (nextPos.activeColor == currentState.helperBotColor) {
+                    triggerHelperBotMove(nextPos)
+                } else {
+                    // When it's opponent's turn, user plays manually. Clear any helper arrows.
+                    _uiState.update { it.copy(engineArrowMove = null) }
+                }
             } else {
                 updateAssistantEvaluation()
             }
@@ -273,14 +276,13 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     fun updateAssistantEvaluation() {
         val state = _uiState.value
         if (state.gameMode == GameMode.PLAYER_VS_AI && state.position.activeColor != state.playerColor) { _uiState.update { it.copy(engineArrowMove = null) }; return }
-        if (state.gameMode == GameMode.HELPER_BOT && state.isFenGame) return
         if (state.gameMode == GameMode.HELPER_BOT && state.position.activeColor != state.helperBotColor) { _uiState.update { it.copy(engineArrowMove = null) }; return }
-        if (!state.isAssistantMode && state.gameMode != GameMode.ANALYSIS) { _uiState.update { it.copy(engineArrowMove = null) }; return }
+        if (!state.isAssistantMode && state.gameMode != GameMode.ANALYSIS && state.gameMode != GameMode.HELPER_BOT) { _uiState.update { it.copy(engineArrowMove = null) }; return }
         val pos = state.position
         val movesUci = state.moveHistory.map { it.uci }
         viewModelScope.launch(Dispatchers.Default) {
             val currentState = _uiState.value
-            if ((currentState.gameMode == GameMode.HELPER_BOT && !currentState.isFenGame && currentState.position.activeColor != currentState.helperBotColor) || (currentState.gameMode == GameMode.PLAYER_VS_AI && currentState.position.activeColor != currentState.playerColor)) {
+            if ((currentState.gameMode == GameMode.HELPER_BOT && currentState.position.activeColor != currentState.helperBotColor) || (currentState.gameMode == GameMode.PLAYER_VS_AI && currentState.position.activeColor != currentState.playerColor)) {
                 _uiState.update { it.copy(engineArrowMove = null) }
                 return@launch
             }
@@ -353,17 +355,17 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     fun startCustomGame(
         fenString: String,
         mode: GameMode,
-        playerColor: PieceColor
+        playerColor: PieceColor,
+        helperColor: PieceColor = playerColor,
+        helperAutoPlay: Boolean = true
     ): Boolean {
         val position = ChessPosition.fromFen(fenString) ?: return false
         aiJob?.cancel()
         oexEngineManager.sendNewGame()
         gameStartTime = System.currentTimeMillis()
         
-        // For helper bot, helper color should be the side-to-move (FEN activeColor)
-        // For player vs AI, player color is what user selected
-        val helperColor = if (mode == GameMode.HELPER_BOT) position.activeColor else playerColor
-        val helperAutoPlay = false // Helper bot should only suggest, not auto-play
+        val actualHelperColor = if (mode == GameMode.HELPER_BOT) helperColor else playerColor
+        val actualHelperAutoPlay = if (mode == GameMode.HELPER_BOT) helperAutoPlay else false
         
         _uiState.update { 
             it.copy(
@@ -381,8 +383,8 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
                 engineMateIn = null,
                 gameMode = mode, 
                 playerColor = playerColor, 
-                helperBotColor = helperColor, 
-                helperBotAutoPlay = helperAutoPlay, 
+                helperBotColor = actualHelperColor, 
+                helperBotAutoPlay = actualHelperAutoPlay, 
                 boardOrientation = playerColor, 
                 isFenGame = true, 
                 isAssistantMode = if (mode == GameMode.HELPER_BOT) true else it.isAssistantMode,
@@ -394,7 +396,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         
         if (mode == GameMode.PLAYER_VS_AI && position.activeColor != playerColor) {
             triggerAiMove(position)
-        } else if (mode == GameMode.HELPER_BOT) {
+        } else if (mode == GameMode.HELPER_BOT && position.activeColor == actualHelperColor) {
             triggerHelperBotMove(position)
         } else {
             updateAssistantEvaluation()
