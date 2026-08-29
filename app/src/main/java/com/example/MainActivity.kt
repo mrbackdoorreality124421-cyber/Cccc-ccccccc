@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -64,9 +63,13 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
                             Text(screenTitle(currentScreen), fontWeight = FontWeight.Bold)
                         }
                     },
-                    navigationIcon = if (secondary) {
-                        { IconButton(onClick = { currentScreen = ScreenState.MAIN_MENU }, modifier = Modifier.testTag("global_back")) { Icon(Icons.Default.ArrowBack, "Back") } }
-                    } else null,
+                    navigationIcon = {
+                        if (secondary) {
+                            IconButton(onClick = { currentScreen = ScreenState.MAIN_MENU }, modifier = Modifier.testTag("global_back")) {
+                                Icon(Icons.Default.ArrowBack, "Back")
+                            }
+                        }
+                    },
                     actions = {
                         if (currentScreen == ScreenState.MAIN_MENU) {
                             IconButton(onClick = { currentScreen = ScreenState.IMAGE_PUZZLE }, modifier = Modifier.testTag("nav_btn_image_puzzle")) { Icon(Icons.Default.AutoAwesome, "Image Puzzle") }
