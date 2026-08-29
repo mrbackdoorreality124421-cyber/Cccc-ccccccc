@@ -181,10 +181,10 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         if (status == GameStatus.IN_PROGRESS) {
             if (currentState.gameMode == GameMode.PLAYER_VS_AI && nextPos.activeColor != currentState.playerColor) {
                 triggerAiMove(nextPos)
-            } else if (currentState.gameMode == GameMode.HELPER_BOT && currentState.isFenGame) {
+            } else if (currentState.gameMode == GameMode.HELPER_BOT) {
+                // Helper bot always suggests the next move for the side-to-move
+                // Update helperBotColor to match the new side-to-move
                 _uiState.update { it.copy(helperBotColor = nextPos.activeColor) }
-                triggerHelperBotMove(nextPos)
-            } else if (currentState.gameMode == GameMode.HELPER_BOT && nextPos.activeColor == currentState.helperBotColor) {
                 triggerHelperBotMove(nextPos)
             } else {
                 updateAssistantEvaluation()
@@ -261,6 +261,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
             val oexResult = oexEngineManager.findBestMove(currentPos.toFen(), movesUci, state.aiSearchDepth, state.aiMoveTimeMs) { scoreCp, mateIn, _, _ -> _uiState.update { it.copy(engineEvaluationCp = scoreCp, engineMateIn = mateIn) } }
             val calculatedMove = oexResult?.bestMoveUci?.let { parseUciToLegalMove(it, currentPos) }
             _uiState.update { it.copy(isEngineThinking = false, engineArrowMove = calculatedMove, engineEvaluationCp = oexResult?.scoreCp ?: 0, engineMateIn = oexResult?.mateIn, engineErrorMessage = if (calculatedMove == null) "Engine Error: Could not calculate helper move." else null) }
+            // Helper bot shows arrow but does NOT auto-play unless explicitly enabled
             if (calculatedMove != null && _uiState.value.status == GameStatus.IN_PROGRESS && _uiState.value.helperBotAutoPlay) {
                 delay(600)
                 executeMove(calculatedMove)
@@ -356,7 +357,41 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     ): Boolean {
         val position = ChessPosition.fromFen(fenString) ?: return false
         aiJob?.cancel()
-        _uiState.update { it.copy(position = position, moveHistory = emptyList(), positionHistory = listOf(position), redoStack = emptyList(), status = GameStatus.IN_PROGRESS, selectedSquare = null, legalMovesForSelected = emptyList(), lastMove = null, engineArrowMove = null, isEngineThinking = false, gameMode = mode, playerColor = playerColor, helperBotColor = playerColor, helperBotAutoPlay = true, boardOrientation = playerColor, isFenGame = true, promotionPending = null, activePuzzle = null, puzzleMessage = null) }
+        oexEngineManager.sendNewGame()
+        gameStartTime = System.currentTimeMillis()
+        
+        // For helper bot, helper color should be the side-to-move (FEN activeColor)
+        // For player vs AI, player color is what user selected
+        val helperColor = if (mode == GameMode.HELPER_BOT) position.activeColor else playerColor
+        val helperAutoPlay = false // Helper bot should only suggest, not auto-play
+        
+        _uiState.update { 
+            it.copy(
+                position = position, 
+                moveHistory = emptyList(), 
+                positionHistory = listOf(position), 
+                redoStack = emptyList(), 
+                status = GameStatus.IN_PROGRESS, 
+                selectedSquare = null, 
+                legalMovesForSelected = emptyList(), 
+                lastMove = null, 
+                engineArrowMove = null, 
+                isEngineThinking = false,
+                engineEvaluationCp = 0,
+                engineMateIn = null,
+                gameMode = mode, 
+                playerColor = playerColor, 
+                helperBotColor = helperColor, 
+                helperBotAutoPlay = helperAutoPlay, 
+                boardOrientation = playerColor, 
+                isFenGame = true, 
+                isAssistantMode = if (mode == GameMode.HELPER_BOT) true else it.isAssistantMode,
+                promotionPending = null, 
+                activePuzzle = null, 
+                puzzleMessage = null
+            ) 
+        }
+        
         if (mode == GameMode.PLAYER_VS_AI && position.activeColor != playerColor) {
             triggerAiMove(position)
         } else if (mode == GameMode.HELPER_BOT) {
