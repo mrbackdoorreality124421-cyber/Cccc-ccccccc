@@ -1,0 +1,1 @@
+FEN String Load Mode scope: implement only FEN load flow, Play Against Bot / Bot Helper selection, side selection, exact FEN state preservation, automatic bot turn, and existing arrow/recommendation integration. Do not change unrelated modes or UI.
