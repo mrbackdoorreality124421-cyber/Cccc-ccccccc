@@ -9,6 +9,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -16,12 +17,13 @@ class GroqVisionService(context: Context) {
     private val keyStore = SecureGroqKeyStore(context)
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(45, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     companion object {
-        const val MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+        // Current Groq multimodal model documented for image inputs.
+        const val MODEL = "qwen/qwen3.6-27b"
         private const val BASE = "https://api.groq.com/openai/v1"
     }
 
@@ -30,49 +32,60 @@ class GroqVisionService(context: Context) {
     fun clearKey() = keyStore.clear()
 
     suspend fun testConnection(apiKey: String): Result<String> = withContext(Dispatchers.IO) {
-        requestModels(apiKey.trim())
-    }
-
-    private fun requestModels(apiKey: String): Result<String> = runCatching {
-        require(apiKey.isNotBlank()) { "Groq API key is missing." }
-        val request = Request.Builder().url("$BASE/models")
-            .header("Authorization", "Bearer $apiKey")
-            .get().build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("Groq rejected the key (HTTP ${response.code}).")
-            "Connection successful"
+        runCatching {
+            val key = apiKey.trim()
+            require(key.isNotBlank()) { "Enter a Groq API key first." }
+            val body = JSONObject()
+                .put("model", MODEL)
+                .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", "Reply with exactly: GROQ_OK")))
+                .put("temperature", 0)
+                .put("max_completion_tokens", 8)
+                .toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder().url("$BASE/chat/completions")
+                .header("Authorization", "Bearer $key")
+                .header("Content-Type", "application/json")
+                .post(body).build()
+            client.newCall(request).execute().use { response ->
+                val raw = response.body?.string().orEmpty()
+                if (!response.isSuccessful) error(formatApiError(response.code, raw))
+                val text = JSONObject(raw).optJSONArray("choices")?.optJSONObject(0)
+                    ?.optJSONObject("message")?.optString("content").orEmpty().trim()
+                if (text.isBlank()) error("Groq responded without a message.")
+                "Connection successful • $MODEL"
+            }
         }
     }
 
     suspend fun imageToFen(context: Context, uri: Uri, apiKey: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            require(apiKey.isNotBlank()) { "Groq API key is missing." }
+            val key = apiKey.trim()
+            require(key.isNotBlank()) { "Groq API key is missing." }
             val resolver = context.contentResolver
             val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Unable to read image.")
             require(bytes.isNotEmpty()) { "Selected image is empty." }
             require(bytes.size <= 20 * 1024 * 1024) { "Image is too large. Choose an image under 20 MB." }
             val mime = resolver.getType(uri)?.takeIf { it.startsWith("image/") } ?: "image/jpeg"
             val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            val prompt = "Extract the chess position from this image. Ignore arrows, circles, highlights, coordinates, captions, UI and annotations. Identify only the actual pieces on the board and whose turn it is. Return ONLY one valid complete FEN string, with no markdown, no explanation, and no extra text."
-            val content = org.json.JSONArray()
+            val prompt = "Extract the chess position from this image. Ignore arrows, circles, highlights, coordinates, captions, UI and annotations. Identify only the actual pieces on the board and whose turn it is. Return ONLY one complete valid FEN string. No markdown, no explanation, no extra text."
+            val content = JSONArray()
                 .put(JSONObject().put("type", "text").put("text", prompt))
                 .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:$mime;base64,$encoded")))
-            val message = JSONObject().put("role", "user").put("content", content)
             val body = JSONObject()
                 .put("model", MODEL)
+                .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", content)))
                 .put("temperature", 0)
-                .put("max_tokens", 80)
-                .put("messages", org.json.JSONArray().put(message))
+                .put("max_completion_tokens", 80)
                 .toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder().url("$BASE/chat/completions")
-                .header("Authorization", "Bearer $apiKey")
+                .header("Authorization", "Bearer $key")
                 .header("Content-Type", "application/json")
                 .post(body).build()
             client.newCall(request).execute().use { response ->
                 val raw = response.body?.string().orEmpty()
-                if (!response.isSuccessful) error("Vision request failed (HTTP ${response.code}).")
-                val text = JSONObject(raw).getJSONArray("choices").getJSONObject(0)
-                    .getJSONObject("message").optString("content").trim()
+                if (!response.isSuccessful) error(formatApiError(response.code, raw))
+                val text = JSONObject(raw).optJSONArray("choices")?.optJSONObject(0)
+                    ?.optJSONObject("message")?.optString("content").orEmpty().trim()
+                require(text.isNotBlank()) { "Groq returned an empty vision response." }
                 validateFen(cleanFen(text))
             }
         }
@@ -92,7 +105,7 @@ class GroqVisionService(context: Context) {
         ranks.forEach { rank ->
             var count = 0
             for (c in rank) {
-                if (c.isDigit()) count += c.digitToInt()
+                if (c.isDigit()) { require(c in '1'..'8'); count += c.digitToInt() }
                 else { require(c in "PNBRQKpnbrqk") { "AI returned an invalid piece." }; count++ }
             }
             require(count == 8) { "AI returned an invalid rank." }
@@ -100,5 +113,11 @@ class GroqVisionService(context: Context) {
         require(fields[1] == "w" || fields[1] == "b") { "AI returned an invalid side to move." }
         require(fields[0].count { it == 'K' } == 1 && fields[0].count { it == 'k' } == 1) { "FEN must contain both kings." }
         return fen
+    }
+
+    private fun formatApiError(code: Int, raw: String): String {
+        val message = runCatching { JSONObject(raw).optJSONObject("error")?.optString("message") }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+        return message?.let { "Groq error (HTTP $code): $it" } ?: "Groq request failed (HTTP $code). Check your API key and internet connection."
     }
 }
