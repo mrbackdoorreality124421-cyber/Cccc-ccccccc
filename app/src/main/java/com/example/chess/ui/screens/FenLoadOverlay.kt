@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.chess.model.ChessPosition
 import com.example.chess.model.GameMode
@@ -35,12 +36,20 @@ fun FenLoadOverlay(
     var showFenDialog by remember { mutableStateOf(false) }
     var showModeDialog by remember { mutableStateOf(false) }
     var fen by remember { mutableStateOf("") }
+    var validatedPosition by remember { mutableStateOf<ChessPosition?>(null) }
     var selectedMode by remember { mutableStateOf(GameMode.PLAYER_VS_AI) }
     var selectedColor by remember { mutableStateOf(PieceColor.WHITE) }
     var error by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = modifier.fillMaxWidth().padding(16.dp)) {
-        OutlinedButton(onClick = { error = null; showFenDialog = true }) {
+        OutlinedButton(
+            onClick = {
+                error = null
+                validatedPosition = null
+                showFenDialog = true
+            },
+            modifier = Modifier.testTag("fen_load_button")
+        ) {
             Text("Load FEN String")
         }
     }
@@ -54,85 +63,118 @@ fun FenLoadOverlay(
                     OutlinedTextField(
                         value = fen,
                         onValueChange = { fen = it; error = null },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("fen_input"),
                         label = { Text("FEN") },
-                        supportingText = { Text(error ?: "Paste a complete chess FEN position.") },
-                        minLines = 3
+                        supportingText = { Text(error ?: "Paste the complete FEN position (all 6 fields).") },
+                        minLines = 3,
+                        singleLine = false
                     )
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    if (ChessPosition.fromFen(fen) != null) {
-                        showFenDialog = false
-                        showModeDialog = true
-                        error = null
-                    } else {
-                        error = "Invalid FEN. Please check the position and all FEN fields."
-                    }
-                }) { Text("Validate & Continue") }
+                Button(
+                    onClick = {
+                        val position = ChessPosition.fromFen(fen)
+                        if (position != null && fen.trim().split(Regex("\\s+")).size == 6) {
+                            validatedPosition = position
+                            error = null
+                            showFenDialog = false
+                            showModeDialog = true
+                        } else {
+                            error = "Invalid FEN. Enter a complete valid 6-field FEN position."
+                        }
+                    },
+                    modifier = Modifier.testTag("fen_validate_button")
+                ) { Text("Validate & Continue") }
             },
             dismissButton = { TextButton(onClick = { showFenDialog = false }) { Text("Cancel") } }
         )
     }
 
-    if (showModeDialog) {
+    if (showModeDialog && validatedPosition != null) {
+        val position = validatedPosition!!
         AlertDialog(
             onDismissRequest = { showModeDialog = false },
-            title = { Text("FEN Position Mode") },
+            title = { Text("FEN Position Loaded") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Choose how you want to use this exact FEN position:")
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Exact position loaded. Side to move: ${if (position.activeColor == PieceColor.WHITE) "White" else "Black"}."
+                    )
+                    Text("Choose one of the two FEN modes:")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         FilterChip(
                             selected = selectedMode == GameMode.PLAYER_VS_AI,
                             onClick = { selectedMode = GameMode.PLAYER_VS_AI },
                             label = { Text("Play Against Bot") },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f).testTag("fen_mode_vs_bot")
                         )
                         FilterChip(
                             selected = selectedMode == GameMode.HELPER_BOT,
                             onClick = { selectedMode = GameMode.HELPER_BOT },
                             label = { Text("Bot Helper") },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f).testTag("fen_mode_helper")
                         )
                     }
+
                     if (selectedMode == GameMode.PLAYER_VS_AI) {
-                        Text("Choose your side:")
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Choose your color:")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             FilterChip(
                                 selected = selectedColor == PieceColor.WHITE,
                                 onClick = { selectedColor = PieceColor.WHITE },
                                 label = { Text("White") },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).testTag("fen_color_white")
                             )
                             FilterChip(
                                 selected = selectedColor == PieceColor.BLACK,
                                 onClick = { selectedColor = PieceColor.BLACK },
                                 label = { Text("Black") },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).testTag("fen_color_black")
                             )
                         }
+                        Text(
+                            "The FEN side-to-move is preserved. If it is the bot's turn, the bot will move automatically."
+                        )
                     } else {
-                        Text("Bot Helper recommends the best move for the current side-to-move. It will not play the move automatically.")
+                        Text(
+                            "Bot Helper recommends the best move for the current side-to-move. It will show the recommendation arrow but will not play the move automatically."
+                        )
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    val started = viewModel.startCustomGame(
-                        fenString = fen,
-                        mode = selectedMode,
-                        playerColor = selectedColor
-                    )
-                    if (started) {
-                        showModeDialog = false
-                        onFenLoaded()
-                    }
-                }) { Text("Start") }
+                Button(
+                    onClick = {
+                        val started = viewModel.startCustomGame(
+                            fenString = fen.trim(),
+                            mode = selectedMode,
+                            playerColor = selectedColor
+                        )
+                        if (started) {
+                            showModeDialog = false
+                            validatedPosition = null
+                            onFenLoaded()
+                        }
+                    },
+                    modifier = Modifier.testTag("fen_start_button")
+                ) { Text("Start") }
             },
-            dismissButton = { TextButton(onClick = { showModeDialog = false }) { Text("Back") } }
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showModeDialog = false
+                        showFenDialog = true
+                    }
+                ) { Text("Back") }
+            }
         )
     }
 }
