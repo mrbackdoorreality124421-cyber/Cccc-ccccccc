@@ -8,6 +8,9 @@ enum class PieceType(val charUpper: Char, val baseValue: Int) {
     QUEEN('Q', 900),
     KING('K', 20000);
 
+    val char: Char get() = charUpper
+    val value: Int get() = baseValue
+
     val sanLetter: String
         get() = if (this == PAWN) "" else charUpper.toString()
 }

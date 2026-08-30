@@ -53,9 +53,15 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  sourceSets {
+    getByName("main") {
+      jniLibs.srcDirs("src/main/jniLibs")
+    }
+  }
   packaging {
     jniLibs {
       useLegacyPackaging = true
+      pickFirsts += listOf("libstockfish.so")
     }
   }
   dependenciesInfo {
@@ -142,46 +148,12 @@ dependencies {
 
 tasks.register("downloadStockfish") {
     val projectDirStr = project.projectDir.absolutePath
-    val buildDirStr = project.layout.buildDirectory.get().asFile.absolutePath
 
     doLast {
         val arm64Lib = File("$projectDirStr/src/main/jniLibs/arm64-v8a/libstockfish.so")
         val arm32Lib = File("$projectDirStr/src/main/jniLibs/armeabi-v7a/libstockfish.so")
-
         arm64Lib.parentFile.mkdirs()
         arm32Lib.parentFile.mkdirs()
-        
-        if (!arm64Lib.exists()) {
-            println("Downloading Stockfish ARM64...")
-            val tarFile = File("$buildDirStr/tmp/sf64.tar")
-            tarFile.parentFile.mkdirs()
-            URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv8.tar").openStream().use { input ->
-                FileOutputStream(tarFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            val outDir = File("$buildDirStr/tmp/sf64_out")
-            outDir.mkdirs()
-            Runtime.getRuntime().exec(arrayOf("tar", "-xf", tarFile.absolutePath, "-C", outDir.absolutePath)).waitFor()
-            val extractedFile = File(outDir, "stockfish/stockfish-android-armv8")
-            extractedFile.renameTo(arm64Lib)
-        }
-        
-        if (!arm32Lib.exists()) {
-            println("Downloading Stockfish ARM32...")
-            val tarFile = File("$buildDirStr/tmp/sf32.tar")
-            tarFile.parentFile.mkdirs()
-            URL("https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-android-armv7.tar").openStream().use { input ->
-                FileOutputStream(tarFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            val outDir = File("$buildDirStr/tmp/sf32_out")
-            outDir.mkdirs()
-            Runtime.getRuntime().exec(arrayOf("tar", "-xf", tarFile.absolutePath, "-C", outDir.absolutePath)).waitFor()
-            val extractedFile = File(outDir, "stockfish/stockfish-android-armv7")
-            extractedFile.renameTo(arm32Lib)
-        }
     }
 }
 

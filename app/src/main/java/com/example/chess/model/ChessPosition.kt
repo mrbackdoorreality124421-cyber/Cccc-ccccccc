@@ -556,6 +556,15 @@ data class ChessPosition(
         return false
     }
 
+    /** Checks if this position matches at least 3 occurrences in the provided FEN history (considering board, active color, castling, and en passant). */
+    fun isThreefoldRepetition(fenHistory: List<String>): Boolean {
+        val currentKey = toFen().split(Regex("\\s+")).take(4).joinToString(" ")
+        val count = fenHistory.count { fen ->
+            fen.split(Regex("\\s+")).take(4).joinToString(" ") == currentKey
+        }
+        return count >= 3
+    }
+
     companion object {
         fun initial(): ChessPosition {
             return fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")!!

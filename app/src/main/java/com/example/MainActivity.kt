@@ -42,7 +42,6 @@ class MainActivity : ComponentActivity() {
 fun ChessAppRoot(viewModel: ChessViewModel) {
     var currentScreen by remember { mutableStateOf(ScreenState.ENGINE_DISCOVERY) }
     val secondary = currentScreen != ScreenState.ENGINE_DISCOVERY && currentScreen != ScreenState.MAIN_MENU
-    val ownChrome = currentScreen == ScreenState.PLAY_BOARD || currentScreen == ScreenState.CUSTOM_BOARD || currentScreen == ScreenState.IMAGE_PUZZLE || currentScreen == ScreenState.MAIN_MENU
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -94,7 +93,16 @@ fun ChessAppRoot(viewModel: ChessViewModel) {
         Crossfade(targetState = currentScreen, label = "screen_transition", modifier = Modifier.padding(innerPadding)) { screen ->
             when (screen) {
                 ScreenState.ENGINE_DISCOVERY -> EngineDiscoveryHomeScreen(viewModel, onEngineSelected = { currentScreen = ScreenState.MAIN_MENU })
-                ScreenState.MAIN_MENU -> MainMenuScreen(viewModel, onStartGame = { currentScreen = ScreenState.PLAY_BOARD }, onChangeEngine = { currentScreen = ScreenState.ENGINE_DISCOVERY }, onOpenPuzzles = { currentScreen = ScreenState.PUZZLES }, onOpenHistory = { currentScreen = ScreenState.HISTORY }, onOpenSettings = { currentScreen = ScreenState.SETTINGS }, onOpenVisionPuzzle = { currentScreen = ScreenState.IMAGE_PUZZLE }, onOpenBoardEditor = { currentScreen = ScreenState.CUSTOM_BOARD })
+                ScreenState.MAIN_MENU -> MainMenuScreen(
+                    viewModel = viewModel, 
+                    onStartGame = { currentScreen = ScreenState.PLAY_BOARD }, 
+                    onChangeEngine = { currentScreen = ScreenState.ENGINE_DISCOVERY }, 
+                    onOpenPuzzles = { currentScreen = ScreenState.PUZZLES }, 
+                    onOpenHistory = { currentScreen = ScreenState.HISTORY }, 
+                    onOpenSettings = { currentScreen = ScreenState.SETTINGS }, 
+                    onOpenVisionPuzzle = { currentScreen = ScreenState.IMAGE_PUZZLE }, 
+                    onOpenBoardEditor = { currentScreen = ScreenState.CUSTOM_BOARD }
+                )
                 ScreenState.PLAY_BOARD -> PlayScreen(viewModel, onBackToMenu = { currentScreen = ScreenState.MAIN_MENU }, onOpenSettings = { currentScreen = ScreenState.SETTINGS })
                 ScreenState.PUZZLES -> PuzzlesScreen(viewModel, onPuzzleSelected = { currentScreen = ScreenState.PLAY_BOARD })
                 ScreenState.HISTORY -> HistoryScreen(viewModel)

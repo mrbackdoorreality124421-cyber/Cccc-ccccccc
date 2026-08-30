@@ -161,7 +161,60 @@ fun EngineDiscoveryHomeScreen(
                 }
             }
 
-            // Step 1: Device Detection Specs Card
+            // Step 1: Bundled Native Stockfish Status Card
+            val bundledEngine = discoveredEngines.find { it.isBundled }
+            if (bundledEngine != null) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF2E7D32).copy(alpha = 0.15f)
+                        ),
+                        border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(Color(0xFF2E7D32), Color(0xFF4CAF50))))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Ready",
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+                                Text(
+                                    text = bundledEngine.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2E7D32)
+                                )
+                                Text(
+                                    text = "Pre-bundled native binary — 100% offline, zero setup required",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (bundledEngine.id == state.selectedOexEngineId) {
+                                Text(
+                                    text = "ACTIVE",
+                                    color = Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier
+                                        .background(Color(0xFF2E7D32).copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Step 2: Device Detection Specs Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),

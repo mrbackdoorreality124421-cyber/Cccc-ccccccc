@@ -17,5 +17,6 @@ local.properties
 .env
 debug.keystore
 
-# Ignore Stockfish native libraries
-app/src/main/jniLibs/
+# Keep Stockfish native libraries in repository
+!app/src/main/jniLibs/
+!app/src/main/jniLibs/**/*.so

@@ -17,6 +17,17 @@ A modern, full-featured Chess application for Android built using **Jetpack Comp
   - Interactive 2D board preview with side-to-move, castling rights, and move number badges.
   - Seamlessly transition into either *Play Against Bot* or *Bot Helper* mode from any custom position.
 
+- **Chess Variants (8 Modes)**:
+  - **Fischer Random (Chess960)**: Randomized back-rank pieces maintaining opposite-colored bishops and king between rooks.
+  - **King of the Hill**: Race your King to control the four central squares (d4, d5, e4, e5).
+  - **Three-Check**: Deliver check 3 times to win the game instantly.
+  - **Crazyhouse**: Captured enemy pieces enter your reserve and can be dropped onto any open square.
+  - **Antichess (Giveaway)**: Captures are mandatory; the first player to lose all pieces (or get stalemated) wins.
+  - **Atomic Chess**: Captures trigger an atomic explosion obliterating surrounding non-pawn pieces.
+  - **Horde Chess**: White commands a vast swarm of 36 pawns against Black's conventional army.
+  - **Racing Kings**: Both players start on ranks 1 & 2 and race their kings to the 8th rank with check prohibited.
+  - **Variant Bot AI**: Dedicated minimax engine with rule evaluations supporting all variant modes.
+
 - **Board Visuals & Customization**:
   - 2D Canvas board with multiple themes (Classic Wood, Modern Blue, Dark Charcoal, Glass).
   - Piece drag-and-drop and tap-to-move animations.

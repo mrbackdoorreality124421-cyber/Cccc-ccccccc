@@ -4,17 +4,32 @@ import com.example.chess.data.PuzzleRecord
 
 enum class GameMode {
     PLAYER_VS_AI,
-    HELPER_BOT,
     PLAYER_VS_PLAYER,
+    HELPER_BOT,
     ANALYSIS,
     TACTICAL_PUZZLE
 }
 
-enum class BoardTheme(val displayName: String, val lightColor: Long, val darkColor: Long, val accentColor: Long) {
-    CLASSIC_WOOD("Classic Wood", 0xFFDFD8C8, 0xFF88735D, 0xFFD4AF37),
-    TOURNAMENT_GREEN("Tournament Green", 0xFFEEEED2, 0xFF769656, 0xFFF6F669),
-    MIDNIGHT_DARK("Midnight Dark", 0xFF2A2D34, 0xFF14171E, 0xFF4E9F3D),
-    OCEAN_BLUE("Ocean Blue", 0xFFDDE6ED, 0xFF526D82, 0xFF2196F3)
+enum class PieceStyle(val displayName: String) {
+    CLASSIC("Classic Staunton"),
+    MODERN("Modern Vector"),
+    NEO("Neo Futuristic")
+}
+
+enum class BoardTheme(
+    val displayName: String,
+    val lightColor: Long,
+    val darkColor: Long,
+    val accentColor: Long,
+    val pieceStyle: PieceStyle = PieceStyle.CLASSIC
+) {
+    CLASSIC_WOOD("Classic Wood", 0xFFF0D9B5, 0xFFB58863, 0xFF8B4513, PieceStyle.CLASSIC),
+    DARK_CHARCOAL("Dark Charcoal", 0xFF4A4A4A, 0xFF2B2B2B, 0xFF607D8B, PieceStyle.MODERN),
+    TOURNAMENT_GREEN("Tournament Green", 0xFFEBECD0, 0xFF779556, 0xFF33691E, PieceStyle.CLASSIC),
+    ROYAL_BLUE("Royal Blue", 0xFFDEE3E6, 0xFF5B8DB8, 0xFF1565C0, PieceStyle.MODERN),
+    MIDNIGHT("Midnight", 0xFF3D3D3D, 0xFF1A1A1A, 0xFF9C27B0, PieceStyle.NEO),
+    CHERRY_WOOD("Cherry Wood", 0xFFF5E6D3, 0xFF8B4513, 0xFF5D4037, PieceStyle.CLASSIC),
+    GLASS("Glass", 0x80FFFFFF, 0x40000000, 0xFF00BCD4, PieceStyle.NEO)
 }
 
 data class PromotionPending(
@@ -38,17 +53,20 @@ data class ChessGameState(
     val isEngineThinking: Boolean = false,
     val engineEvaluationCp: Int = 0,
     val engineMateIn: Int? = null,
+    val engineCurrentDepth: Int = 0,
     val engineStatusMessage: String? = null,
     val gameMode: GameMode = GameMode.PLAYER_VS_AI,
+    val difficultyLevel: Int = 5, // 1=Beginner, 2=Easy, 3=Medium, 4=Hard, 5=Master (MAX POWER)
     val boardOrientation: PieceColor = PieceColor.WHITE,
     val is3DView: Boolean = false,
     val isAssistantMode: Boolean = false,
     val isFenGame: Boolean = false,
     val isHapticEnabled: Boolean = true,
     val isSoundEnabled: Boolean = true,
-    val boardTheme: BoardTheme = BoardTheme.TOURNAMENT_GREEN,
-    val aiSearchDepth: Int = 7,
-    val aiMoveTimeMs: Int = 1200,
+    val boardTheme: BoardTheme = BoardTheme.CLASSIC_WOOD,
+    val pieceStyle: PieceStyle = PieceStyle.CLASSIC,
+    val aiSearchDepth: Int = 30,
+    val aiMoveTimeMs: Int = 5000,
     val playerColor: PieceColor = PieceColor.WHITE,
     val helperBotColor: PieceColor = PieceColor.WHITE,
     val helperBotAutoPlay: Boolean = true,
@@ -56,7 +74,7 @@ data class ChessGameState(
     val activePuzzle: PuzzleRecord? = null,
     val puzzleMoveIndex: Int = 0,
     val puzzleMessage: String? = null,
-    val activeEngineName: String = "No Engine Detected",
+    val activeEngineName: String = "Stockfish 18",
     val selectedOexEngineId: String? = null,
     val isStockfishActive: Boolean = false,
     val isExternalEngineRunning: Boolean = false,
@@ -64,6 +82,24 @@ data class ChessGameState(
 ) {
     val isGameOver: Boolean
         get() = status != GameStatus.IN_PROGRESS
+
+    val whitePlayer: String
+        get() = when (gameMode) {
+            GameMode.PLAYER_VS_AI -> if (playerColor == PieceColor.WHITE) "You" else "Stockfish 18 (Master)"
+            GameMode.HELPER_BOT -> if (helperBotColor == PieceColor.WHITE) "Helper Bot" else "You"
+            GameMode.PLAYER_VS_PLAYER -> "White"
+            GameMode.ANALYSIS -> "White"
+            GameMode.TACTICAL_PUZZLE -> if (playerColor == PieceColor.WHITE) "You" else "Puzzle Bot"
+        }
+
+    val blackPlayer: String
+        get() = when (gameMode) {
+            GameMode.PLAYER_VS_AI -> if (playerColor == PieceColor.BLACK) "You" else "Stockfish 18 (Master)"
+            GameMode.HELPER_BOT -> if (helperBotColor == PieceColor.BLACK) "Helper Bot" else "You"
+            GameMode.PLAYER_VS_PLAYER -> "Black"
+            GameMode.ANALYSIS -> "Black"
+            GameMode.TACTICAL_PUZZLE -> if (playerColor == PieceColor.BLACK) "You" else "Puzzle Bot"
+        }
 
     val statusDescription: String
         get() = when (status) {

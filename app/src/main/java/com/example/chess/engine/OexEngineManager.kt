@@ -10,7 +10,6 @@ import android.provider.OpenableColumns
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.*
 import java.util.zip.ZipFile
 
@@ -22,7 +21,8 @@ data class OexEngineInfo(
     val version: String = "",
     val isStockfish: Boolean = false,
     val isOex: Boolean = true,
-    val isCustom: Boolean = false
+    val isCustom: Boolean = false,
+    val isBundled: Boolean = false
 )
 
 data class EngineEvaluationResult(
@@ -43,35 +43,57 @@ class OexEngineManager(private val context: Context) {
     private val customEnginesPrefs = context.getSharedPreferences("custom_engines_prefs", Context.MODE_PRIVATE)
 
     /**
-     * Discovers all installed UCI / OEX engines on the user's device,
-     * including Stockfish (Stockfish 18, Stockfish 17, Stockfish OEX, DroidFish, etc.)
-     * and any previously imported custom engines.
+     * PRIMARY METHOD: Find pre-bundled Stockfish in APK's native library directory.
+     * This is checked first before any download or external scan.
      */
+    fun findBundledStockfish(): OexEngineInfo? {
+        try {
+            val nativeLibraryDir = context.applicationInfo.nativeLibraryDir ?: return null
+            val bundledStockfish = File(nativeLibraryDir, "libstockfish.so")
+            if (bundledStockfish.exists()) {
+                Log.i("OexEngineManager", "Found bundled Stockfish: ${bundledStockfish.absolutePath}")
+                return OexEngineInfo(
+                    id = "bundled_stockfish",
+                    name = "Stockfish 18 (Built-in Native)",
+                    packageName = context.packageName,
+                    executablePath = bundledStockfish.absolutePath,
+                    version = "Stockfish 18 Official Release",
+                    isStockfish = true,
+                    isOex = false,
+                    isCustom = true,
+                    isBundled = true
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("OexEngineManager", "Error finding bundled Stockfish: ${e.message}")
+        }
+        return null
+    }
+
+    /**
+     * Get the best available engine — prefers bundled Stockfish.
+     */
+    suspend fun getBestAvailableEngine(): OexEngineInfo? {
+        val bundled = findBundledStockfish()
+        if (bundled != null) return bundled
+        val discovered = discoverEngines()
+        return discovered.firstOrNull { it.isBundled }
+            ?: discovered.firstOrNull { it.isStockfish }
+            ?: discovered.firstOrNull()
+    }
+
     suspend fun discoverEngines(): List<OexEngineInfo> = withContext(Dispatchers.IO) {
         val list = mutableListOf<OexEngineInfo>()
         val pm = context.packageManager
         val seenPackages = mutableSetOf<String>()
 
         // 0. Check Pre-Bundled / Native Stockfish Engine
-        val nativeLibraryDir = context.applicationInfo.nativeLibraryDir
-        val bundledStockfish = File(nativeLibraryDir, "libstockfish.so")
-        if (bundledStockfish.exists()) {
-            list.add(
-                OexEngineInfo(
-                    id = "bundled_stockfish",
-                    name = "Stockfish 18 (Bundled Native)",
-                    packageName = context.packageName,
-                    executablePath = bundledStockfish.absolutePath,
-                    version = "Stockfish 18 Official Release",
-                    isStockfish = true,
-                    isOex = false,
-                    isCustom = true
-                )
-            )
-            seenPackages.add("bundled_stockfish")
+        findBundledStockfish()?.let {
+            list.add(it)
+            seenPackages.add(it.id)
         }
 
-        // 1. Check custom imported engines from Downloads/Files
+        // 1. Check custom imported engines
         val savedCustomEngines = loadSavedCustomEngines()
         for (custom in savedCustomEngines) {
             if (custom.executablePath != null && File(custom.executablePath).exists()) {
@@ -80,7 +102,7 @@ class OexEngineManager(private val context: Context) {
             }
         }
 
-        // 2. Query Intent actions for Open Exchange (OEX) standard
+        // 2. Query Intent actions for Open Exchange (OEX)
         try {
             val intent = Intent("chess.engine.engineAction")
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -148,26 +170,15 @@ class OexEngineManager(private val context: Context) {
             Log.e("OexEngineManager", "Error scanning installed packages: ${e.message}")
         }
 
-        // Sort: Stockfish first, then custom engines, then others
         list.sortedWith(compareByDescending<OexEngineInfo> { it.isStockfish }.thenByDescending { it.isCustom })
     }
 
-    /**
-     * Imports a custom chess engine binary or APK chosen by the user from Downloads.
-     * Verifies the engine with a strict UCI handshake.
-     */
-    /**
-     * Imports and extracts a chess engine from any user-provided URI (.tar, .tar.gz, .zip, .apk, or raw binary).
-     * Specifically designed to handle Stockfish release archives (e.g. stockfish-android-armv8-dotprod.tar).
-     */
     suspend fun importCustomEngineFromUri(uri: Uri): Result<OexEngineInfo> = withContext(Dispatchers.IO) {
         try {
             val fileName = queryFileName(uri) ?: "stockfish_archive_${System.currentTimeMillis()}.tar"
             val customId = "stockfish_${System.currentTimeMillis()}"
             val targetDir = File(context.filesDir, "custom_engines/$customId")
-            if (!targetDir.exists()) {
-                targetDir.mkdirs()
-            }
+            if (!targetDir.exists()) targetDir.mkdirs()
 
             val extractedFiles = context.contentResolver.openInputStream(uri)?.use { input ->
                 ArchiveExtractor.extract(input, fileName, targetDir)
@@ -176,10 +187,8 @@ class OexEngineManager(private val context: Context) {
             val bestBinary = ArchiveExtractor.findBestExecutableBinary(extractedFiles)
                 ?: return@withContext Result.failure(Exception("No executable binary found in archive. Ensure the archive contains a Stockfish/UCI binary."))
 
-            // Ensure permissions
             setExecutablePermission(bestBinary)
 
-            // Also prepare a codeCache backup path in case of Android 10+ SELinux constraints
             val codeCacheDir = File(context.codeCacheDir, "engines/$customId")
             if (!codeCacheDir.exists()) codeCacheDir.mkdirs()
             val codeCacheBinary = File(codeCacheDir, bestBinary.name)
@@ -192,7 +201,6 @@ class OexEngineManager(private val context: Context) {
                 setExecutablePermission(codeCacheBinary)
             } catch (_: Exception) {}
 
-            // Verify if the engine responds to UCI commands
             var validPath: String? = null
             var engineNameResult: String? = null
 
@@ -208,7 +216,6 @@ class OexEngineManager(private val context: Context) {
                 }
             }
 
-            // If neither responded, but ELF was identified with high confidence, still allow it
             val finalExecPath = validPath ?: bestBinary.absolutePath
             val finalEngineName = engineNameResult
                 ?: if (fileName.contains("stockfish", ignoreCase = true) || bestBinary.name.contains("stockfish", ignoreCase = true)) {
@@ -237,9 +244,6 @@ class OexEngineManager(private val context: Context) {
         }
     }
 
-    /**
-     * Automatically scans standard device download folders for Stockfish archives (such as stockfish-android-armv8-dotprod.tar).
-     */
     suspend fun autoScanAndImportFromDownloads(): Result<OexEngineInfo> = withContext(Dispatchers.IO) {
         val candidateDirs = listOfNotNull(
             File("/storage/emulated/0/Download"),
@@ -251,7 +255,6 @@ class OexEngineManager(private val context: Context) {
         for (dir in candidateDirs) {
             if (dir.exists() && dir.isDirectory) {
                 val files = dir.listFiles() ?: continue
-                // Search for stockfish tar/zip files
                 val targetFile = files.filter { it.isFile }
                     .sortedWith(
                         compareByDescending<File> { it.name.contains("dotprod", ignoreCase = true) }
@@ -295,7 +298,7 @@ class OexEngineManager(private val context: Context) {
                 }
             }
         }
-        Result.failure(Exception("No Stockfish .tar/.zip archive found directly in Downloads folder. Please tap 'Select File' to choose it."))
+        Result.failure(Exception("No Stockfish archive found in Downloads."))
     }
 
     private data class UciVerification(val isValid: Boolean, val engineName: String?)
@@ -402,25 +405,17 @@ class OexEngineManager(private val context: Context) {
         return result
     }
 
-    /**
-     * Extracts or prepares the native engine binary with executable permissions.
-     */
     private fun prepareEngineExecutable(packageName: String, appInfo: ApplicationInfo): String? {
         try {
             val enginesDir = File(context.filesDir, "oex_engines/$packageName")
-            if (!enginesDir.exists()) {
-                enginesDir.mkdirs()
-            }
+            if (!enginesDir.exists()) enginesDir.mkdirs()
 
-            // 1. Check native library directory of the target app
             val nativeDir = File(appInfo.nativeLibraryDir)
             if (nativeDir.exists() && nativeDir.isDirectory) {
                 val nativeFiles = nativeDir.listFiles()
                 if (nativeFiles != null && nativeFiles.isNotEmpty()) {
                     for (f in nativeFiles) {
                         if (f.canExecute() || f.name.endsWith(".so")) {
-                            // On Android, executing directly from public nativeLibraryDir is supported,
-                            // or copy to filesDir with executable flags
                             val targetExec = File(enginesDir, f.name)
                             if (!targetExec.exists() || targetExec.length() != f.length()) {
                                 f.copyTo(targetExec, overwrite = true)
@@ -432,7 +427,6 @@ class OexEngineManager(private val context: Context) {
                 }
             }
 
-            // 2. Extract directly from APK (sourceDir) if native files are bundled inside
             val apkFile = File(appInfo.sourceDir)
             if (apkFile.exists()) {
                 ZipFile(apkFile).use { zip ->
@@ -480,10 +474,7 @@ class OexEngineManager(private val context: Context) {
     }
 
     /**
-     * Starts the UCI engine process and performs the standard UCI handshake:
-     * 1. Send: uci\n -> Drain lines until 'uciok'
-     * 2. Send: isready\n -> Drain lines until 'readyok'
-     * 3. Send: ucinewgame\n
+     * Start engine with MAXIMUM STRENGTH settings
      */
     suspend fun startEngine(engine: OexEngineInfo): Boolean = withContext(Dispatchers.IO) {
         stopEngine()
@@ -491,15 +482,12 @@ class OexEngineManager(private val context: Context) {
 
         try {
             val file = File(execPath)
-            if (file.exists()) {
-                setExecutablePermission(file)
-            }
+            if (file.exists()) setExecutablePermission(file)
 
             val pb = ProcessBuilder(execPath)
-            if (file.parentFile != null && file.parentFile.exists()) {
-                pb.directory(file.parentFile)
-            }
+            if (file.parentFile?.exists() == true) pb.directory(file.parentFile)
             pb.redirectErrorStream(true)
+
             val process = pb.start()
             activeProcess = process
             val writer = BufferedWriter(OutputStreamWriter(process.outputStream, Charsets.UTF_8))
@@ -508,13 +496,13 @@ class OexEngineManager(private val context: Context) {
             processReader = reader
             activeEngineInfo = engine
 
-            // 1. Send "uci" and wait for "uciok"
+            // === PHASE 1: UCI Handshake ===
             writer.write("uci\n")
             writer.flush()
 
             var uciOkReceived = false
-            val startUciTime = System.currentTimeMillis()
-            while (System.currentTimeMillis() - startUciTime < 4000) {
+            val uciStart = System.currentTimeMillis()
+            while (System.currentTimeMillis() - uciStart < 5000) {
                 if (reader.ready()) {
                     val line = reader.readLine() ?: break
                     Log.d("UCI_INIT", line)
@@ -523,17 +511,34 @@ class OexEngineManager(private val context: Context) {
                         break
                     }
                 } else {
-                    Thread.sleep(25)
+                    Thread.sleep(20)
                 }
             }
 
-            // 2. Send "isready" and wait for "readyok"
+            // === PHASE 2: Configure MAX POWER Settings ===
+            // These settings make Stockfish play at ABSOLUTE MAXIMUM strength
+            writer.write("setoption name Hash value 256\n")          // 256MB hash table
+            writer.write("setoption name Threads value 4\n")         // Use 4 threads if available
+            writer.write("setoption name MultiPV value 1\n")         // Only best line (faster)
+            writer.write("setoption name Skill Level value 20\n")    // MAX skill (20 = strongest)
+            writer.write("setoption name UCI_LimitStrength value false\n") // NO strength limiting
+            writer.write("setoption name UCI_Elo value 3200\n")      // Max Elo rating
+            writer.write("setoption name Contempt value 24\n")       // Max fighting spirit
+            writer.write("setoption name Analysis Contempt value Both\n")
+            writer.write("setoption name Slow Mover value 100\n")    // Normal time usage
+            writer.write("setoption name nodestime value 0\n")       // No node limit
+            writer.write("setoption name Clear Hash\n")              // Clear previous hash
+            writer.flush()
+
+            Thread.sleep(150)
+
+            // === PHASE 3: isready ===
             writer.write("isready\n")
             writer.flush()
 
             var readyOkReceived = false
-            val startReadyTime = System.currentTimeMillis()
-            while (System.currentTimeMillis() - startReadyTime < 4000) {
+            val readyStart = System.currentTimeMillis()
+            while (System.currentTimeMillis() - readyStart < 5000) {
                 if (reader.ready()) {
                     val line = reader.readLine() ?: break
                     Log.d("UCI_READY", line)
@@ -542,31 +547,29 @@ class OexEngineManager(private val context: Context) {
                         break
                     }
                 } else {
-                    Thread.sleep(25)
+                    Thread.sleep(20)
                 }
             }
 
-            // 3. Send "ucinewgame"
+            // === PHASE 4: New Game ===
             writer.write("ucinewgame\n")
             writer.write("isready\n")
             writer.flush()
 
-            val startNewGameTime = System.currentTimeMillis()
-            while (System.currentTimeMillis() - startNewGameTime < 3000) {
+            val newGameStart = System.currentTimeMillis()
+            while (System.currentTimeMillis() - newGameStart < 3000) {
                 if (reader.ready()) {
                     val line = reader.readLine() ?: break
-                    if (line.trim() == "readyok" || line.contains("readyok")) {
-                        break
-                    }
+                    if (line.trim() == "readyok" || line.contains("readyok")) break
                 } else {
-                    Thread.sleep(25)
+                    Thread.sleep(20)
                 }
             }
 
-            Log.i("OexEngineManager", "Engine ${engine.name} initialized successfully (uciok=$uciOkReceived, readyok=$readyOkReceived)")
+            Log.i("OexEngineManager", "Engine ${engine.name} started at MAX POWER (uciok=$uciOkReceived, readyok=$readyOkReceived)")
             true
         } catch (e: Exception) {
-            Log.e("OexEngineManager", "Failed to launch process for ${engine.name}: ${e.message}")
+            Log.e("OexEngineManager", "Failed to start engine: ${e.message}")
             stopEngine()
             false
         }
@@ -586,79 +589,51 @@ class OexEngineManager(private val context: Context) {
         }
     }
 
-    private fun sendRawCommand(cmd: String) {
-        try {
-            val writer = processWriter ?: return
-            writer.write(cmd)
-            writer.write("\n")
-            writer.flush()
-        } catch (e: Exception) {
-            Log.e("OexEngineManager", "Error sending UCI command ($cmd): ${e.message}")
-        }
-    }
-
     /**
-     * Queries the external engine (Stockfish 18 / UCI) for the best move in a position.
-     * Uses strict Universal Chess Interface stdin/stdout I/O protocol:
-     * - Drains buffer
-     * - Sends 'isready' -> awaits 'readyok'
-     * - Sends 'position startpos moves [moves]' or 'position fen [fen]'
-     * - Sends 'go movetime [ms] depth [depth]'
-     * - Parses real-time 'info' lines (score cp, score mate, depth, pv)
-     * - Parses 'bestmove [uci]' and returns result
+     * Find BEST move with MAXIMUM analysis
      */
     suspend fun findBestMove(
         fen: String,
         movesUci: List<String> = emptyList(),
-        depth: Int = 12,
-        moveTimeMs: Int = 1200,
+        depth: Int = 30,              // MAX depth (30 = very deep)
+        moveTimeMs: Int = 5000,       // 5 seconds think time default
         onProgress: (scoreCp: Int, mateIn: Int?, depth: Int, pv: List<String>) -> Unit = { _, _, _, _ -> }
     ): EngineEvaluationResult? = withContext(Dispatchers.IO) {
-        val process = activeProcess
-        val writer = processWriter
-        val reader = processReader
-
-        if (process == null || writer == null || reader == null) {
-            return@withContext null
-        }
+        val process = activeProcess ?: return@withContext null
+        val writer = processWriter ?: return@withContext null
+        val reader = processReader ?: return@withContext null
 
         try {
-            // 1. Drain any residual output lines from previous operations
+            // Drain residual output
             while (reader.ready()) {
                 reader.readLine()
             }
 
-            // 2. Synchronize with isready -> readyok
+            // Sync with isready
             writer.write("isready\n")
             writer.flush()
             val syncStart = System.currentTimeMillis()
             while (System.currentTimeMillis() - syncStart < 2000) {
                 if (reader.ready()) {
                     val line = reader.readLine() ?: break
-                    if (line.trim() == "readyok" || line.contains("readyok")) {
-                        break
-                    }
+                    if (line.trim() == "readyok" || line.contains("readyok")) break
                 } else {
-                    Thread.sleep(15)
+                    Thread.sleep(10)
                 }
             }
 
-            // 3. Set position: strictly use the full authoritative FEN representation
+            // Send position
             val cleanFen = fen.trim()
-            if (cleanFen.isNotEmpty()) {
-                Log.d("UCI_SEARCH", "Sending position fen: $cleanFen")
-                writer.write("position fen $cleanFen\n")
-            } else if (movesUci.isNotEmpty()) {
-                val movesString = movesUci.joinToString(" ")
-                Log.d("UCI_SEARCH", "Sending position startpos moves: $movesString")
-                writer.write("position startpos moves $movesString\n")
+            if (movesUci.isNotEmpty()) {
+                val movesStr = movesUci.joinToString(" ")
+                writer.write("position fen $cleanFen moves $movesStr\n")
             } else {
-                Log.d("UCI_SEARCH", "Sending position startpos")
-                writer.write("position startpos\n")
+                writer.write("position fen $cleanFen\n")
             }
             writer.flush()
 
-            // 4. Send go command
+            // === GO COMMAND FOR MAX POWER ===
+            // Use BOTH depth AND movetime for strongest analysis
             writer.write("go movetime $moveTimeMs depth $depth\n")
             writer.flush()
 
@@ -667,11 +642,12 @@ class OexEngineManager(private val context: Context) {
             var currentMateIn: Int? = null
             var currentDepth = 0
             var currentPv = emptyList<String>()
+            var bestDepthReached = 0
 
-            val searchTimeoutMs = moveTimeMs.toLong() + 3500L
-            val searchStartTime = System.currentTimeMillis()
+            val searchTimeoutMs = moveTimeMs.toLong() + 2500L
+            val searchStart = System.currentTimeMillis()
 
-            while (System.currentTimeMillis() - searchStartTime < searchTimeoutMs) {
+            while (System.currentTimeMillis() - searchStart < searchTimeoutMs) {
                 if (reader.ready()) {
                     val line = reader.readLine() ?: break
                     val trimmed = line.trim()
@@ -688,77 +664,72 @@ class OexEngineManager(private val context: Context) {
                         break
                     } else if (trimmed.startsWith("info")) {
                         // Parse depth
-                        if (trimmed.contains("depth ")) {
-                            val dIdx = trimmed.indexOf("depth ")
-                            val dStr = trimmed.substring(dIdx + 6).trim().split(" ").firstOrNull()
-                            dStr?.toIntOrNull()?.let { currentDepth = it }
+                        val depthMatch = Regex("depth\\s+(\\d+)").find(trimmed)
+                        depthMatch?.groupValues?.get(1)?.toIntOrNull()?.let {
+                            currentDepth = it
+                            if (it > bestDepthReached) bestDepthReached = it
                         }
 
-                        // Parse score
-                        if (trimmed.contains("score cp ")) {
-                            val idx = trimmed.indexOf("score cp ")
-                            val scoreStr = trimmed.substring(idx + 9).trim().split(" ").firstOrNull()
-                            scoreStr?.toIntOrNull()?.let {
-                                currentScoreCp = it
-                                currentMateIn = null
-                            }
-                        } else if (trimmed.contains("score mate ")) {
-                            val idx = trimmed.indexOf("score mate ")
-                            val mateStr = trimmed.substring(idx + 11).trim().split(" ").firstOrNull()
-                            mateStr?.toIntOrNull()?.let {
-                                currentMateIn = it
-                                currentScoreCp = if (it > 0) 10000 else -10000
-                            }
+                        // Parse score cp
+                        val scoreCpMatch = Regex("score\\s+cp\\s+([\\-\\d]+)").find(trimmed)
+                        scoreCpMatch?.groupValues?.get(1)?.toIntOrNull()?.let {
+                            currentScoreCp = it
+                            currentMateIn = null
                         }
 
-                        // Parse PV (Principal Variation) line
-                        if (trimmed.contains(" pv ")) {
-                            val pvIdx = trimmed.indexOf(" pv ")
-                            val pvSub = trimmed.substring(pvIdx + 4).trim()
-                            currentPv = pvSub.split(Regex("\\s+")).filter { it.length in 4..5 }
+                        // Parse score mate
+                        val scoreMateMatch = Regex("score\\s+mate\\s+([\\-\\d]+)").find(trimmed)
+                        scoreMateMatch?.groupValues?.get(1)?.toIntOrNull()?.let {
+                            currentMateIn = it
+                            currentScoreCp = if (it > 0) 30000 else -30000
+                        }
+
+                        // Parse PV
+                        val pvMatch = Regex("\\bpv\\s+(.+)").find(trimmed)
+                        pvMatch?.groupValues?.get(1)?.let { pvStr ->
+                            currentPv = pvStr.split(Regex("\\s+")).filter { it.length in 4..5 }
                         }
 
                         onProgress(currentScoreCp, currentMateIn, currentDepth, currentPv)
                     }
                 } else {
-                    Thread.sleep(15)
+                    Thread.sleep(10)
                 }
             }
 
-            // If bestmove was not received in time, send "stop" command to force engine output
+            // If no bestmove received, send stop
             if (bestMove == null) {
                 writer.write("stop\n")
                 writer.flush()
                 val stopStart = System.currentTimeMillis()
-                while (System.currentTimeMillis() - stopStart < 1500) {
+                while (System.currentTimeMillis() - stopStart < 2000) {
                     if (reader.ready()) {
                         val line = reader.readLine() ?: break
                         val trimmed = line.trim()
                         if (trimmed.startsWith("bestmove")) {
                             val parts = trimmed.split(Regex("\\s+"))
-                            if (parts.size >= 2) {
-                                val candidate = parts[1].trim()
-                                if (candidate != "(none)" && candidate.isNotEmpty()) {
-                                    bestMove = candidate
-                                }
+                            if (parts.size >= 2 && parts[1] != "(none)") {
+                                bestMove = parts[1].trim()
                             }
                             break
                         }
                     } else {
-                        Thread.sleep(15)
+                        Thread.sleep(10)
                     }
                 }
             }
+
+            Log.i("OexEngineManager", "Search complete: bestMove=$bestMove, depth=$bestDepthReached, score=$currentScoreCp")
 
             EngineEvaluationResult(
                 bestMoveUci = bestMove,
                 scoreCp = currentScoreCp,
                 mateIn = currentMateIn,
-                depth = currentDepth,
+                depth = bestDepthReached,
                 pvLine = currentPv
             )
         } catch (e: Exception) {
-            Log.e("OexEngineManager", "Error during UCI search: ${e.message}")
+            Log.e("OexEngineManager", "Search error: ${e.message}")
             null
         }
     }

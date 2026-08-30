@@ -1,6 +1,8 @@
 package com.example.chess.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -18,75 +21,52 @@ import kotlin.math.abs
 
 @Composable
 fun EvaluationBar(
-    evalCp: Int,
+    evaluation: Int,
     mateIn: Int?,
-    isThinking: Boolean,
     modifier: Modifier = Modifier
 ) {
-    // Evaluation mapped between 0.0 (Black winning) and 1.0 (White winning)
-    // 0 cp -> 0.5 ratio
-    val rawRatio = when {
-        mateIn != null -> if (mateIn > 0) 0.98f else 0.02f
-        else -> {
-            val clampedCp = evalCp.coerceIn(-1000, 1000)
-            0.5f + (clampedCp / 2000f)
-        }
-    }
+    val normalizedEval = (evaluation / 100.0).coerceIn(-10.0, 10.0)
+    val targetWhiteFraction = ((normalizedEval + 10.0) / 20.0).toFloat().coerceIn(0.05f, 0.95f)
 
-    val animatedRatio by animateFloatAsState(targetValue = rawRatio, label = "eval_ratio")
+    val animatedFraction by animateFloatAsState(
+        targetValue = targetWhiteFraction,
+        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
+        label = "eval_bar_anim"
+    )
 
-    val evalText = when {
-        mateIn != null -> "M${abs(mateIn)}"
-        else -> {
-            val score = evalCp / 100.0
-            if (evalCp > 0) "+%.1f".format(score) else "%.1f".format(score)
-        }
-    }
-
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(28.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF1E293B)),
-        verticalAlignment = Alignment.CenterVertically
+            .height(8.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0xFF1E293B))
     ) {
-        // White share (left)
+        // Black background
         Box(
             modifier = Modifier
-                .fillMaxHeight()
-                .weight(animatedRatio.coerceIn(0.05f, 0.95f))
-                .background(Color(0xFFF1F5F9))
-                .padding(horizontal = 8.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            if (animatedRatio >= 0.5f) {
-                Text(
-                    text = evalText,
-                    color = Color(0xFF0F172A),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
+                .fillMaxSize()
+                .background(Color(0xFF1E293B))
+        )
 
-        // Black share (right)
+        // White advantage fill
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .weight((1f - animatedRatio).coerceIn(0.05f, 0.95f))
-                .background(Color(0xFF0F172A))
-                .padding(horizontal = 8.dp),
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            if (animatedRatio < 0.5f) {
-                Text(
-                    text = evalText,
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
+                .fillMaxWidth(animatedFraction)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color(0xFF10B981), Color(0xFF34D399))
+                    )
                 )
-            }
-        }
+        )
+
+        // Center equilibrium indicator
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(2.dp)
+                .background(Color.White.copy(alpha = 0.6f))
+                .align(Alignment.Center)
+        )
     }
 }

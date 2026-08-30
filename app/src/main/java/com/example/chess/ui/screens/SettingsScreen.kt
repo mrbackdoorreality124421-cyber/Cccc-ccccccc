@@ -142,6 +142,66 @@ fun SettingsScreen(
             }
         }
 
+        // Section 1.5: Piece Style
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Piece Vector Style",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val styles = listOf(
+                        com.example.chess.model.PieceStyle.CLASSIC to "Staunton",
+                        com.example.chess.model.PieceStyle.MODERN to "Modern",
+                        com.example.chess.model.PieceStyle.NEO to "Neo 3D"
+                    )
+
+                    for ((pStyle, label) in styles) {
+                        val isSelected = state.pieceStyle == pStyle
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { viewModel.setPieceStyle(pStyle) }
+                                .padding(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            com.example.chess.ui.components.ChessPieceView(
+                                piece = com.example.chess.model.ChessPiece(
+                                    com.example.chess.model.PieceType.KNIGHT,
+                                    com.example.chess.model.PieceColor.WHITE
+                                ),
+                                style = pStyle,
+                                size = 38.dp
+                            )
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Section 2: Audio & Feedback
         Card(
             modifier = Modifier.fillMaxWidth(),

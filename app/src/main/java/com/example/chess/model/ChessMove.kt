@@ -10,13 +10,17 @@ data class ChessMove(
     val isCastleKingside: Boolean = false,
     val isCastleQueenside: Boolean = false,
     val isEnPassant: Boolean = false,
-    val san: String = ""
+    val san: String = "",
+    val isDrop: Boolean = false
 ) {
     val isCastle: Boolean
         get() = isCastleKingside || isCastleQueenside
 
     val uci: String
         get() {
+            if (isDrop) {
+                return "${pieceMoved.charUpper}@${to.algebraic}"
+            }
             val promo = when (promotion) {
                 PieceType.QUEEN -> "q"
                 PieceType.ROOK -> "r"
