@@ -43,7 +43,6 @@ fun EngineDiscoveryHomeScreen(
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     val discoveredEngines by viewModel.discoveredOexEngines.collectAsState()
-    val installState by viewModel.installState.collectAsState()
     val specs = viewModel.deviceSpecs
 
     val bundled = remember { com.example.chess.engine.OexEngineManager(context.applicationContext).findBundledStockfish() }
