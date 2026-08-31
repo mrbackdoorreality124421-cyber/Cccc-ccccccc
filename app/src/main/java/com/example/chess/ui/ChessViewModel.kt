@@ -698,6 +698,27 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+
+    fun setDifficulty(d: com.example.chess.model.BotDifficulty) {
+        _uiState.update { it.copy(aiMoveTimeMs = d.moveTimeMs, aiSearchDepth = d.depth) }
+    }
+
+    fun enterAnalysisMode() {
+        aiJob?.cancel()
+        _uiState.update { it.copy(gameMode = GameMode.ANALYSIS, isAssistantMode = true) }
+        updateAssistantEvaluation()
+    }
+
+    fun setDifficulty(d: com.example.chess.model.BotDifficulty) {
+        _uiState.update { it.copy(aiMoveTimeMs = d.moveTimeMs, aiSearchDepth = d.depth) }
+    }
+
+    fun enterAnalysisMode() {
+        aiJob?.cancel()
+        _uiState.update { it.copy(gameMode = GameMode.ANALYSIS, isAssistantMode = true) }
+        updateAssistantEvaluation()
+    }
+
     fun undoMove() {
         val state = _uiState.value
         if (state.moveHistory.isEmpty() || state.isEngineThinking) return
