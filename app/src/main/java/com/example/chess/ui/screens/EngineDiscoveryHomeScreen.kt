@@ -44,35 +44,8 @@ fun EngineDiscoveryHomeScreen(
     val discoveredEngines by viewModel.discoveredOexEngines.collectAsState()
     val specs = viewModel.deviceSpecs
 
-    val bundled = remember { com.example.chess.engine.OexEngineManager(context.applicationContext).findBundledStockfish() }
-
-
     var isScanning by remember { mutableStateOf(false) }
-    var isImportingCustom by remember { mutableStateOf(false) }
-    var customErrorMessage by remember { mutableStateOf<String?>(null) }
     var hasCheckedPermissions by remember { mutableStateOf(false) }
-
-    // Launcher for file picker to import custom engine from Downloads / Storage
-    val customEnginePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            isImportingCustom = true
-            customErrorMessage = null
-            viewModel.importCustomEngine(uri) { success, msg ->
-                isImportingCustom = false
-                if (success) {
-                    val currentSelected = state.selectedOexEngineId?.let { id ->
-                        viewModel.discoveredOexEngines.value.find { it.id == id }
-                    }
-                    onEngineSelected(currentSelected)
-                } else {
-                    customErrorMessage = msg
-                }
-            }
-        }
-    }
-
     // Permission launcher for storage & device engine detection
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -115,50 +88,6 @@ fun EngineDiscoveryHomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
         ) {
-
-            // Built-in Engine Status Card
-            item {
-                if (bundled != null) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32).copy(alpha = 0.2f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32))
-                            Text(
-                                text = "Stockfish 18 (Built-in) — Works offline",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32)
-                            )
-                        }
-                    }
-                } else {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF57C00).copy(alpha = 0.2f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFF57C00))
-                            Text(
-                                text = "Warning: built-in engine missing",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFF57C00)
-                            )
-                        }
-                    }
-                }
-            }
-
             // App Hero Title
             item {
                 Column(
@@ -339,41 +268,6 @@ fun EngineDiscoveryHomeScreen(
                 }
             }
 
-            // Step 4 & 5: Live Auto-Installation Progress / Status Card
-            item {
-
-            }
-
-            // Custom Error Message Toast / Card
-            if (customErrorMessage != null) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                            Text(
-                                text = customErrorMessage ?: "",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(onClick = { customErrorMessage = null }) {
-                                Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onErrorContainer)
-                            }
-                        }
-                    }
-                }
-            }
 
             // Section: Detected Engines List
             item {
@@ -494,89 +388,6 @@ fun EngineDiscoveryHomeScreen(
                 )
             }
 
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = CardDefaults.outlinedCardBorder()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Manual Import / Storage Search",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = "If you have already downloaded 'stockfish-android-armv8-dotprod.tar' into Downloads, select it here to extract and activate immediately.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // 1-Tap Auto-Scan Downloads
-                        Button(
-                            onClick = {
-                                isImportingCustom = true
-                                customErrorMessage = null
-                                viewModel.autoDetectStockfishFromDownloads { success, msg ->
-                                    isImportingCustom = false
-                                    if (success) {
-                                        val currentSelected = state.selectedOexEngineId?.let { id ->
-                                            viewModel.discoveredOexEngines.value.find { it.id == id }
-                                        }
-                                        onEngineSelected(currentSelected)
-                                    } else {
-                                        customErrorMessage = msg
-                                    }
-                                }
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("auto_detect_stockfish_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                            enabled = !isImportingCustom
-                        ) {
-                            if (isImportingCustom) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Unpacking & Connecting...", color = Color.White)
-                            } else {
-                                Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.White)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("1-Tap Auto-Load from Downloads", fontWeight = FontWeight.Bold, color = Color.White)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Select .tar file
-                        OutlinedButton(
-                            onClick = { customEnginePickerLauncher.launch("*/*") },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("import_custom_engine_button"),
-                            enabled = !isImportingCustom
-                        ) {
-                            Icon(Icons.Default.FolderOpen, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Select stockfish...tar File", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
         }
     }
 }

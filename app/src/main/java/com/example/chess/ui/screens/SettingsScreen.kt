@@ -45,19 +45,6 @@ fun SettingsScreen(
 
     var showFenDialog by remember { mutableStateOf(false) }
     var fenInputText by remember { mutableStateOf("") }
-    var isImporting by remember { mutableStateOf(false) }
-
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            isImporting = true
-            viewModel.importCustomEngine(uri) { success, msg ->
-                isImporting = false
-                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     Column(
         modifier = modifier
@@ -268,60 +255,7 @@ fun SettingsScreen(
             }
         }
 
-
-        // Section 2.5: Bot Difficulty
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Bot Difficulty",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val difficulties = com.example.chess.model.BotDifficulty.values()
-                    val currentDifficulty = when (state.aiMoveTimeMs) {
-                        500 -> com.example.chess.model.BotDifficulty.BEGINNER
-                        1500 -> com.example.chess.model.BotDifficulty.EASY
-                        3000 -> com.example.chess.model.BotDifficulty.MEDIUM
-                        5000 -> com.example.chess.model.BotDifficulty.HARD
-                        else -> com.example.chess.model.BotDifficulty.MASTER
-                    }
-
-                    for (diff in difficulties) {
-                        val isSelected = currentDifficulty == diff
-                        Button(
-                            onClick = { viewModel.setDifficulty(diff) },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            contentPadding = PaddingValues(vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = diff.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Section 3: AI Engine Strength
+        // Section 3: Stockfish Bot Difficulty Level
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -338,18 +272,26 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Bot & Helper Difficulty",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    val diffLabel = when (state.difficultyLevel) {
+                        1 -> "Beginner (Depth 8)"
+                        2 -> "Easy (Depth 12)"
+                        3 -> "Medium (Depth 18)"
+                        4 -> "Hard (Depth 25)"
+                        else -> "Master (Depth 30)"
+                    }
                     Text(
-                        text = "AI Calculation Depth",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Depth ${state.aiSearchDepth} (${when (state.aiSearchDepth) {
-                            in 1..3 -> "Beginner"
-                            in 4..5 -> "Intermediate"
-                            in 6..7 -> "Advanced"
-                            else -> "Grandmaster"
-                        }})",
+                        text = diffLabel,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
@@ -357,15 +299,26 @@ fun SettingsScreen(
                 }
 
                 Slider(
-                    value = state.aiSearchDepth.toFloat(),
-                    onValueChange = { viewModel.setAiDepth(it.toInt()) },
-                    valueRange = 2f..10f,
-                    steps = 7,
-                    modifier = Modifier.fillMaxWidth().testTag("slider_ai_depth")
+                    value = state.difficultyLevel.toFloat(),
+                    onValueChange = { viewModel.setDifficultyLevel(it.toInt()) },
+                    valueRange = 1f..5f,
+                    steps = 3,
+                    modifier = Modifier.fillMaxWidth().testTag("slider_difficulty_level")
                 )
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Beginner", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Easy", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Medium", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Hard", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Master (Max)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+
                 Text(
-                    text = "Alpha-Beta search with iterative deepening, quiescence analysis, and positional tables.",
+                    text = "Controls Stockfish 18 UCI calculation time, search depth, and evaluation accuracy.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -492,51 +445,6 @@ fun SettingsScreen(
                     }
                 }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                Text(
-                    text = "Stockfish 18 / Custom Engine Import",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Text(
-                    text = "Load 'stockfish-android-armv8-dotprod.tar' or any UCI binary. The app will auto-extract and run it.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            isImporting = true
-                            viewModel.autoDetectStockfishFromDownloads { success, msg ->
-                                isImporting = false
-                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                        modifier = Modifier.weight(1f),
-                        enabled = !isImporting
-                    ) {
-                        Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Auto-Load .tar", fontSize = 12.sp)
-                    }
-
-                    OutlinedButton(
-                        onClick = { filePickerLauncher.launch("*/*") },
-                        modifier = Modifier.weight(1f),
-                        enabled = !isImporting
-                    ) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Pick .tar File", fontSize = 12.sp)
-                    }
-                }
             }
         }
 

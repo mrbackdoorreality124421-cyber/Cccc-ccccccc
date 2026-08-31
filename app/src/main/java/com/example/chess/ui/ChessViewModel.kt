@@ -49,24 +49,36 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     init {
         scanOexEngines()
         viewModelScope.launch { repository.seedDefaultPuzzlesIfEmpty() }
-
-        }
         
-        // Auto-start bundled engine
+        // Auto-detect and launch Bundled Native Stockfish 18 if present
         viewModelScope.launch {
-            val bundled = oexEngineManager.findBundledStockfish()
-            if (bundled != null && oexEngineManager.startEngine(bundled)) {
-                _uiState.update { it.copy(isExternalEngineRunning = true, selectedOexEngineId = bundled.id, engineErrorMessage = null) }
-                updateAssistantEvaluation()
+            val bundledEngine = oexEngineManager.findBundledStockfish()
+            if (bundledEngine != null) {
+                Log.i("ChessViewModel", "Auto-starting bundled Stockfish 18...")
+                val started = oexEngineManager.startEngine(bundledEngine)
+                if (started) {
+                    _uiState.update { 
+                        it.copy(
+                            isExternalEngineRunning = true,
+                            isStockfishActive = true,
+                            activeEngineName = bundledEngine.name,
+                            selectedOexEngineId = bundledEngine.id,
+                            engineErrorMessage = null
+                        ) 
+                    }
+                    _discoveredOexEngines.value = oexEngineManager.discoverEngines()
+                    Log.i("ChessViewModel", "Bundled Stockfish 18 started successfully!")
+                } else {
+                    _uiState.update { 
+                        it.copy(engineErrorMessage = "Built-in engine found but failed to start.") 
+                    }
+                }
             } else {
-                _uiState.update { it.copy(engineErrorMessage = "Built-in Stockfish 18 not found in APK!") }
+                Log.w("ChessViewModel", "No bundled Stockfish found.")
             }
         }
     }
 
-stockfishDownloader.startAutoSetup(forceRedownload = forceRedownload) 
-    }
-    
     fun clearEngineError() { 
         _uiState.update { it.copy(engineErrorMessage = null) } 
     }
@@ -111,33 +123,6 @@ stockfishDownloader.startAutoSetup(forceRedownload = forceRedownload)
         }
     }
 
-    fun importCustomEngine(uri: Uri, onResult: (Boolean, String) -> Unit) {
-        viewModelScope.launch {
-            val result = oexEngineManager.importCustomEngineFromUri(uri)
-            if (result.isSuccess) {
-                val engine = result.getOrNull()
-                _discoveredOexEngines.value = oexEngineManager.discoverEngines()
-                if (engine != null) selectEngine(engine)
-                onResult(true, "Stockfish engine unpacked & loaded successfully: ${engine?.name}")
-            } else {
-                onResult(false, result.exceptionOrNull()?.message ?: "Engine import failed.")
-            }
-        }
-    }
-
-    fun autoDetectStockfishFromDownloads(onResult: (Boolean, String) -> Unit) {
-        viewModelScope.launch {
-            val result = oexEngineManager.autoScanAndImportFromDownloads()
-            if (result.isSuccess) {
-                val engine = result.getOrNull()
-                _discoveredOexEngines.value = oexEngineManager.discoverEngines()
-                if (engine != null) selectEngine(engine)
-                onResult(true, "Stockfish archive auto-detected: ${engine?.name}")
-            } else {
-                onResult(false, result.exceptionOrNull()?.message ?: "No Stockfish file found in Downloads.")
-            }
-        }
-    }
 
     fun setDifficultyLevel(level: Int) {
         _uiState.update { it.copy(difficultyLevel = level.coerceIn(1, 5)) }
@@ -665,27 +650,6 @@ stockfishDownloader.startAutoSetup(forceRedownload = forceRedownload)
         return legalMoves.find { 
             it.from == fromSq && it.to == toSq && (promoType == null || it.promotion == promoType)
         }
-    }
-
-
-    fun setDifficulty(d: com.example.chess.model.BotDifficulty) {
-        _uiState.update { it.copy(aiMoveTimeMs = d.moveTimeMs, aiSearchDepth = d.depth) }
-    }
-
-    fun enterAnalysisMode() {
-        aiJob?.cancel()
-        _uiState.update { it.copy(gameMode = GameMode.ANALYSIS, isAssistantMode = true) }
-        updateAssistantEvaluation()
-    }
-
-    fun setDifficulty(d: com.example.chess.model.BotDifficulty) {
-        _uiState.update { it.copy(aiMoveTimeMs = d.moveTimeMs, aiSearchDepth = d.depth) }
-    }
-
-    fun enterAnalysisMode() {
-        aiJob?.cancel()
-        _uiState.update { it.copy(gameMode = GameMode.ANALYSIS, isAssistantMode = true) }
-        updateAssistantEvaluation()
     }
 
     fun undoMove() {
