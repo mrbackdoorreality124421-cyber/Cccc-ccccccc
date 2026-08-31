@@ -46,7 +46,7 @@ jobs:
 
       - name: Setup Keystore
         run: |
-          keytool -genkeypair -keystore release.jks -alias upload -storepass android123 -keypass android123 -dname "CN=ChessMasterPro" -validity 10000
+          keytool -genkeypair -keystore release.jks -alias upload -keyalg RSA -keysize 2048 -storepass android123 -keypass android123 -dname "CN=ChessMasterPro" -validity 10000
           echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/release.jks" >> $GITHUB_ENV
           echo "STORE_PASSWORD=android123" >> $GITHUB_ENV
           echo "KEY_PASSWORD=android123" >> $GITHUB_ENV
