@@ -268,6 +268,59 @@ fun SettingsScreen(
             }
         }
 
+
+        // Section 2.5: Bot Difficulty
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Bot Difficulty",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val difficulties = com.example.chess.model.BotDifficulty.values()
+                    val currentDifficulty = when (state.aiMoveTimeMs) {
+                        500 -> com.example.chess.model.BotDifficulty.BEGINNER
+                        1500 -> com.example.chess.model.BotDifficulty.EASY
+                        3000 -> com.example.chess.model.BotDifficulty.MEDIUM
+                        5000 -> com.example.chess.model.BotDifficulty.HARD
+                        else -> com.example.chess.model.BotDifficulty.MASTER
+                    }
+
+                    for (diff in difficulties) {
+                        val isSelected = currentDifficulty == diff
+                        Button(
+                            onClick = { viewModel.setDifficulty(diff) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = diff.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Section 3: AI Engine Strength
         Card(
             modifier = Modifier.fillMaxWidth(),
