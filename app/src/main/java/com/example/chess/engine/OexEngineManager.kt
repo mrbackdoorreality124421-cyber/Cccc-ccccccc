@@ -309,7 +309,7 @@ class OexEngineManager(private val context: Context) {
             if (file.exists()) setExecutablePermission(file)
 
             val pb = ProcessBuilder(execPath)
-            if (file.parentFile?.exists() == true) pb.directory(file.parentFile)
+            pb.directory(context.filesDir)
             pb.redirectErrorStream(true)
 
             val process = pb.start()
