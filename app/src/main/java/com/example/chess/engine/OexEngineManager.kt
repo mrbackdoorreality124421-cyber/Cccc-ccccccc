@@ -53,8 +53,8 @@ class OexEngineManager(private val context: Context) {
             if (bundledStockfish.exists()) {
                 Log.i("OexEngineManager", "Found bundled Stockfish: ${bundledStockfish.absolutePath}")
                 return OexEngineInfo(
-                    id = "bundled_stockfish",
-                    name = "Stockfish 18 (Built-in Native)",
+                    id = "bundled-stockfish-18",
+                    name = "Stockfish 18 (Built-in)",
                     packageName = context.packageName,
                     executablePath = bundledStockfish.absolutePath,
                     version = "Stockfish 18 Official Release",
@@ -501,11 +501,15 @@ class OexEngineManager(private val context: Context) {
             writer.flush()
 
             var uciOkReceived = false
+            var idName = ""
             val uciStart = System.currentTimeMillis()
             while (System.currentTimeMillis() - uciStart < 5000) {
                 if (reader.ready()) {
                     val line = reader.readLine() ?: break
                     Log.d("UCI_INIT", line)
+                    if (line.startsWith("id name ")) {
+                        idName = line.removePrefix("id name ").trim()
+                    }
                     if (line.trim() == "uciok" || line.contains("uciok")) {
                         uciOkReceived = true
                         break
@@ -515,19 +519,24 @@ class OexEngineManager(private val context: Context) {
                 }
             }
 
-            // === PHASE 2: Configure MAX POWER Settings ===
-            // These settings make Stockfish play at ABSOLUTE MAXIMUM strength
-            writer.write("setoption name Hash value 256\n")          // 256MB hash table
-            writer.write("setoption name Threads value 4\n")         // Use 4 threads if available
-            writer.write("setoption name MultiPV value 1\n")         // Only best line (faster)
-            writer.write("setoption name Skill Level value 20\n")    // MAX skill (20 = strongest)
-            writer.write("setoption name UCI_LimitStrength value false\n") // NO strength limiting
-            writer.write("setoption name UCI_Elo value 3200\n")      // Max Elo rating
-            writer.write("setoption name Contempt value 24\n")       // Max fighting spirit
+            // Verify Stockfish if bundled
+            if (engine.isBundled && !idName.contains("Stockfish", ignoreCase = true)) {
+                Log.e("OexEngineManager", "Bundled engine id name '$idName' does not contain Stockfish!")
+                // We won't fail hard, but log it
+            }
+
+            // === PHASE 2: Configure Settings ===
+            writer.write("setoption name Skill Level value 20\n")
+            writer.write("setoption name Hash value 256\n")
+            writer.write("setoption name Threads value 4\n")
+            writer.write("setoption name MultiPV value 1\n")
+            writer.write("setoption name UCI_LimitStrength value false\n")
+            writer.write("setoption name UCI_Elo value 3200\n")
+            writer.write("setoption name Contempt value 24\n")
             writer.write("setoption name Analysis Contempt value Both\n")
-            writer.write("setoption name Slow Mover value 100\n")    // Normal time usage
-            writer.write("setoption name nodestime value 0\n")       // No node limit
-            writer.write("setoption name Clear Hash\n")              // Clear previous hash
+            writer.write("setoption name Slow Mover value 100\n")
+            writer.write("setoption name nodestime value 0\n")
+            writer.write("setoption name Clear Hash\n")
             writer.flush()
 
             Thread.sleep(150)
