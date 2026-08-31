@@ -60,7 +60,7 @@ fun PlayScreen(
             },
             dismissButton = {
                 OutlinedButton(onClick = {
-                    viewModel.enterAnalysisMode()
+                    viewModel.startAnalysis()
                     showDialog = false
                 }) {
                     Text("Analysis")
