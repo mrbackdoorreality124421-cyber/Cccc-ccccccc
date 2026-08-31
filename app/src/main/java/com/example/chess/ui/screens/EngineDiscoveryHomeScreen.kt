@@ -46,6 +46,9 @@ fun EngineDiscoveryHomeScreen(
     val installState by viewModel.installState.collectAsState()
     val specs = viewModel.deviceSpecs
 
+    val bundled = remember { com.example.chess.engine.OexEngineManager(context.applicationContext).findBundledStockfish() }
+
+
     var isScanning by remember { mutableStateOf(false) }
     var isImportingCustom by remember { mutableStateOf(false) }
     var customErrorMessage by remember { mutableStateOf<String?>(null) }
@@ -114,6 +117,50 @@ fun EngineDiscoveryHomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
         ) {
+
+            // Built-in Engine Status Card
+            item {
+                if (bundled != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32).copy(alpha = 0.2f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32))
+                            Text(
+                                text = "Stockfish 18 (Built-in) — Works offline",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2E7D32)
+                            )
+                        }
+                    }
+                } else {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF57C00).copy(alpha = 0.2f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFF57C00))
+                            Text(
+                                text = "Warning: built-in engine missing",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF57C00)
+                            )
+                        }
+                    }
+                }
+            }
+
             // App Hero Title
             item {
                 Column(
