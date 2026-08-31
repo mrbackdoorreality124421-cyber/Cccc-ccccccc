@@ -60,32 +60,14 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         
-        // Auto-detect and launch Bundled Native Stockfish 18 if present
+        // Auto-start bundled engine
         viewModelScope.launch {
-            val bundledEngine = oexEngineManager.findBundledStockfish()
-            if (bundledEngine != null) {
-                Log.i("ChessViewModel", "Auto-starting bundled Stockfish 18...")
-                val started = oexEngineManager.startEngine(bundledEngine)
-                if (started) {
-                    _uiState.update { 
-                        it.copy(
-                            isExternalEngineRunning = true,
-                            isStockfishActive = true,
-                            activeEngineName = bundledEngine.name,
-                            selectedOexEngineId = bundledEngine.id,
-                            engineErrorMessage = null
-                        ) 
-                    }
-                    _discoveredOexEngines.value = oexEngineManager.discoverEngines()
-                    Log.i("ChessViewModel", "Bundled Stockfish 18 started successfully!")
-                } else {
-                    _uiState.update { 
-                        it.copy(engineErrorMessage = "Built-in engine found but failed to start.") 
-                    }
-                }
+            val bundled = oexEngineManager.findBundledStockfish()
+            if (bundled != null && oexEngineManager.startEngine(bundled)) {
+                _uiState.update { it.copy(isExternalEngineRunning = true, selectedOexEngineId = bundled.id, engineErrorMessage = null) }
+                updateAssistantEvaluation()
             } else {
-                Log.w("ChessViewModel", "No bundled Stockfish found. Checking download/OEX fallback.")
-                startStockfishAutoSetup(forceRedownload = false)
+                _uiState.update { it.copy(engineErrorMessage = "Built-in Stockfish 18 not found in APK!") }
             }
         }
     }
