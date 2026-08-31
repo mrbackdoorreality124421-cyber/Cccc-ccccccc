@@ -13,6 +13,13 @@ plugins {
 }
 
 android {
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
+
+
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
@@ -146,17 +153,7 @@ dependencies {
   "ksp"(libs.moshi.kotlin.codegen)
 }
 
-tasks.register("downloadStockfish") {
-    val projectDirStr = project.projectDir.absolutePath
 
-    doLast {
-        val arm64Lib = File("$projectDirStr/src/main/jniLibs/arm64-v8a/libstockfish.so")
-        val arm32Lib = File("$projectDirStr/src/main/jniLibs/armeabi-v7a/libstockfish.so")
-        arm64Lib.parentFile.mkdirs()
-        arm32Lib.parentFile.mkdirs()
-    }
 }
 
-tasks.named("preBuild") {
-    dependsOn("downloadStockfish")
-}
+
