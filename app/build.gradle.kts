@@ -13,14 +13,7 @@ plugins {
 }
 
 android {
-    sourceSets {
-        getByName("main") {
-            jniLibs.srcDirs("src/main/jniLibs")
-        }
-    }
-
-
-  namespace = "com.example"
+  namespace = "com.aistudio.chess.kzgq"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
@@ -60,11 +53,6 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-  sourceSets {
-    getByName("main") {
-      jniLibs.srcDirs("src/main/jniLibs")
-    }
-  }
   packaging {
     jniLibs {
       useLegacyPackaging = true
@@ -152,7 +140,3 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
-
-
-
-
