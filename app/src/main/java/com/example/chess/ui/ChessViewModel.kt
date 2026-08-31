@@ -34,8 +34,6 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChessRepository(db.chessDao())
     private val oexEngineManager = OexEngineManager(application)
     private val soundManager = ChessSoundManager()
-    val stockfishDownloader = StockfishDownloader(application, oexEngineManager)
-    val installState = stockfishDownloader.installState
     val deviceSpecs = DeviceSpecsDetector.detect(application)
 
     private val _uiState = MutableStateFlow(ChessGameState())
@@ -51,13 +49,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
     init {
         scanOexEngines()
         viewModelScope.launch { repository.seedDefaultPuzzlesIfEmpty() }
-        viewModelScope.launch {
-            installState.collect { state ->
-                if (state is EngineInstallState.Ready) {
-                    _discoveredOexEngines.value = oexEngineManager.discoverEngines()
-                    selectEngine(state.engine)
-                }
-            }
+
         }
         
         // Auto-start bundled engine
@@ -72,12 +64,7 @@ class ChessViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startStockfishAutoSetup(forceRedownload: Boolean = false) { 
-        if (oexEngineManager.findBundledStockfish() != null && !forceRedownload) {
-            Log.i("ChessViewModel", "Bundled engine available. Skipping auto-download.")
-            return
-        }
-        stockfishDownloader.startAutoSetup(forceRedownload = forceRedownload) 
+stockfishDownloader.startAutoSetup(forceRedownload = forceRedownload) 
     }
     
     fun clearEngineError() { 
